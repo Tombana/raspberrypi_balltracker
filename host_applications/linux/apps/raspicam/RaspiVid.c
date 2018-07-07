@@ -956,12 +956,6 @@ static int parse_cmdline(int argc, const char **argv, RASPIVID_STATE *state)
       return 1;
    }
 
-   // Always disable verbose if output going to stdout
-   if (state->filename && state->filename[0] == '-')
-   {
-      state->verbose = 0;
-   }
-
    return 0;
 }
 
@@ -2159,6 +2153,7 @@ static MMAL_STATUS_T create_encoder_component(RASPIVID_STATE *state)
          else
          {
             vcos_log_error("Too many macroblocks/s requested");
+            status = MMAL_EINVAL;
             goto error;
          }
       }
@@ -2709,9 +2704,6 @@ int main(int argc, const char **argv)
             if (state.filename[0] == '-')
             {
                state.callback_data.file_handle = stdout;
-
-               // Ensure we don't upset the output stream with diagnostics/info
-               state.verbose = 0;
             }
             else
             {

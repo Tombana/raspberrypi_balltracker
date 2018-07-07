@@ -1,4 +1,3 @@
-
 Balltracker using raspberry pi GPU for foosball system.
 
 Relevant files:
