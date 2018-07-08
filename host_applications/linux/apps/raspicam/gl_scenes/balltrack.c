@@ -34,6 +34,29 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
+
+// Divisions by 2 of 720p with correct aspect ratio
+// 1280,720
+//  640,360
+//  320,180
+//  160, 90
+//   80, 45
+
+// -- Source (1080p or 720p)
+static int width0  = 1280;
+static int height0 = 720;
+// -- From source to phase 1: (maintain 720p aspect ratio)
+// -- 2x2 pixels to 1 pixel
+static int width1  = 640 / 2; // RGBA packs two pairs
+static int height1 = 360;
+// -- From phase 1 to phase 2: (maintain 720p aspect ratio)
+// -- 8x8 pixels to 1 pixel
+static int width2  = 80 / 2; // RGBA packs to pairs
+static int height2 = 45;
+// -- From phase 2 to screen
+// state->width,state->height
+
+
 #define BALLTRACK_VSHADER_SOURCE \
     "attribute vec2 vertex;\n" \
     "varying vec2 texcoord;\n" \
@@ -42,66 +65,120 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     "   gl_Position = vec4(vertex, 0.0, 1.0);\n" \
     "}\n"
 
+// The output pixel coordinate (=texcoord) is always the center of an output pixel.
+
 // Balltrack shader first phase
+// To pack to pairs into an RGBA we have in width-direction:
+// tex_unit:0  1  2  3  4
+// Input:   |--|--|--|--|  each is size tex_unit
+// texcoord:|-----*-----|
+// samples: |--*--|--*--|
+// Output:    RG    BA
+// For the height direction it is simpler:
+// tex_unit:0  1  2
+// Input:   |--|--|
+// texcoord:|--*--|
+// samples: |--*--|
+
+// Ball range:  Hue 
+// Field range: Hue: 135-175
+//                   2.25-2.75
 #define BALLTRACK_FSHADER_SOURCE_1 \
     "#extension GL_OES_EGL_image_external : require\n" \
     "uniform samplerExternalOES tex;\n" \
+    "uniform vec2 tex_unit;\n" \
     "varying vec2 texcoord;\n" \
     "void main(void) {\n" \
-    "    vec4 col = texture2D(tex, texcoord);\n" \
-    "    gl_FragColor = col;\n" \
-    "    //const vec4  kRGBToI     = vec4 (0.596, -0.275, -0.321, 0.0);\n" \
-    "    //const vec4  kRGBToQ     = vec4 (0.212, -0.523, 0.311, 0.0);\n" \
-    "    //float I = dot(col, kRGBToI);\n" \
-    "    //float Q = dot(col, kRGBToQ);\n" \
-    "    //float hue = atan(Q, I); // in range -pi,pi where 0,pi is the 0-180 part of Hue \n" \
-    "    // We use a piecewise definition for Hue. Since we are only interested in a small\n" \
-    "    // range, we only compute one of the three parts.\n" \
-    "    // The `piece' we use here lies in [-1,1]. The other parts lie in [1,5].\n" \
+    "    vec4 col1 = texture2D(tex, texcoord - vec2(1,0) * tex_unit);\n" \
+    "    vec4 col2 = texture2D(tex, texcoord + vec2(1,0) * tex_unit);\n" \
+    "    // We use a piecewise definition for Hue.\n" \
+    "    // We only compute two of the three parts.\n" \
+    "    // The `red piece' lies in [-1,1]. The green in [1,3]. The blue in [3,5].\n" \
     "    // Multiply by 60 to get degrees.\n" \
-    "    float value = max(col.r, max(col.g, col.b));\n" \
-    "    float chroma= value - min(col.r, min(col.g, col.b));\n" \
-    "    float sat = (value > 0.0 ? (chroma / value) : 0.0); \n" \
-    "    float hue = (col.r == value ? ((col.g - col.b) / chroma) : (1.0));\n" \
+    "    float value1 = max(col1.r, max(col1.g, col1.b));\n" \
+    "    float chroma1= value1 - min(col1.r, min(col1.g, col1.b));\n" \
+    "    float sat1 = (value1 > 0.0 ? (chroma1 / value1) : 0.0); \n" \
+    "    gl_FragColor.r = 0.0;\n" \
+    "    if (col1.r == value1) {\n" \
+    "        float hue = (col1.g - col1.b) / chroma1;\n" \
+    "        if (hue > -0.30 && hue < 1.0 && sat1 > 0.10 && sat1 < 0.95 && value1 > 0.45 && value1 < 0.98 ) {\n" \
+    "           gl_FragColor.r = 1.0;\n" \
+    "        }\n" \
+    "    }\n" \
+    "    gl_FragColor.g = 0.0;\n" \
+    "    if (col1.g == value1) {\n" \
+    "        float hue = (col1.b - col1.r) / chroma1;\n" \
+    "        if (hue > 0.25 && hue < 0.75 && sat1 > 0.10 && sat1 < 0.95 && value1 > 0.45 && value1 < 0.98 ) {\n" \
+    "           gl_FragColor.g = 1.0;\n" \
+    "        }\n" \
+    "    }\n" \
+    "    \n" \
+    "    float value2 = max(col2.r, max(col2.g, col2.b));\n" \
+    "    float chroma2= value2 - min(col2.r, min(col2.g, col2.b));\n" \
+    "    float sat2 = (value2 > 0.0 ? (chroma2 / value2) : 0.0); \n" \
+    "    gl_FragColor.b = 0.0;\n" \
+    "    if (col2.r == value2) {\n" \
+    "        float hue = (col2.g - col2.b) / chroma2;\n" \
+    "        if (hue > -0.30 && hue < 1.0 && sat2 > 0.10 && sat2 < 0.95 && value2 > 0.45 && value2 < 0.98 ) {\n" \
+    "           gl_FragColor.b = 1.0;\n" \
+    "        }\n" \
+    "    }\n" \
+    "    gl_FragColor.a = 0.0;\n" \
+    "    if (col2.g == value2) {\n" \
+    "        float hue = (col2.b - col2.r) / chroma2;\n" \
+    "        if (hue > 0.25 && hue < 0.75 && sat2 > 0.10 && sat2 < 0.95 && value2 > 0.45 && value2 < 0.98 ) {\n" \
+    "           gl_FragColor.a = 1.0;\n" \
+    "        }\n" \
+    "    }\n" \
+    "    \n" \
     "    // daytime test\n" \
     "    //if (hue > 0.15 && hue < 0.73 && sat > 0.30 && sat < 0.85 && value > 0.55 && value < 0.98 ) {\n" \
     "    // nighttime test\n" \
-    "    if (hue > 0.05 && hue < 1.0 && sat > 0.10 && sat < 0.95 && value > 0.25 && value < 0.98 ) {\n" \
-    "       gl_FragColor.a = 1.0;\n" \
-    "    } else {\n" \
-    "       gl_FragColor.a = 0.0;\n" \
-    "    }\n" \
+    "    //if (hue > 0.05 && hue < 1.0 && sat > 0.10 && sat < 0.95 && value > 0.25 && value < 0.98 ) {\n" \
     "}\n"
 
 // Balltrack shader second phase
-// Ouput is 4X smaller in both directions!
-// So we have to take care of half-integer texture coordinate stuff
+// Ouput is 8X smaller in both directions!
+// We will use GL_LINEAR so that the GPU samples 4 texels at once.
 // The center of the output pixel (=texcoord) is at the intersection
 // of four input pixels.
-//          0    .5     1
-// Input:   |--|--|--|--|
-// Output:  |-----*-----|
-// where the star is the point that we get in texcoord.
+// tex_unit is size of input texel
+// In the height dimension, where we have one output:
+// tex_unit:0  1  2  3  4  5  6  7  8
+// Input:   |--|--|--|--|--|--|--|--|
+// texcoord:|-----------*-----------|
+// samples: |--*--|--*--|--*--|--*--|
+//
+// In the width dimension, where we have two *outputs*:
+// tex_unit:0     1     2     3     4....8
+// Input:   |RG|BA|RG|BA|RG|BA|RG|BA|....|
+// texcoord:|-----------------------*....|
+// samples: |-----*-----|-----*-----|....|
+// Output:  |          RG           | BA |
+//
+// And now just as in phase 1, we want to do the above thing twice,
+// store one result in RG and the other in BA
 #define BALLTRACK_FSHADER_SOURCE_2 \
     "uniform sampler2D tex;\n" \
     "varying vec2 texcoord;\n" \
     "uniform vec2 tex_unit;\n" \
     "void main(void) {\n" \
-    "    \n" \
-    "    vec2 tshift = texcoord - 1.5 * tex_unit;\n" \
-    "    float minVal = 1.0;\n" \
-    "    for (int i = 0; i < 4; ++i) {\n" \
+    "    vec2 tbase = texcoord - 3.0 * tex_unit;\n" \
+    "    vec2 tdif  = 2.0 * tex_unit;\n" \
+    "    vec4 avg1 = vec4(0,0,0,0);\n" \
+    "    vec4 avg2 = vec4(0,0,0,0);\n" \
+    "    for (int i = 0; i < 2; ++i) {\n" \
     "    for (int j = 0; j < 4; ++j) {\n" \
-    "       vec4 p = texture2D(tex, tshift + vec2(i,j) * tex_unit);\n" \
-    "       minVal = min(minVal, p.a);\n" \
+    "       avg1 += texture2D(tex, tbase + vec2(i,j) * tdif);\n" \
     "    }\n" \
     "    }\n" \
-    "    \n" \
-    "    if (minVal > 0.5) {\n" \
-    "        gl_FragColor.a = 1.0;\n" \
-    "    } else {\n" \
-    "        gl_FragColor.a = 0.0;\n" \
+    "    for (int i = 2; i < 4; ++i) {\n" \
+    "    for (int j = 0; j < 4; ++j) {\n" \
+    "       avg2 += texture2D(tex, tbase + vec2(i,j) * tdif);\n" \
     "    }\n" \
+    "    }\n" \
+    "    gl_FragColor.rg = (1.0/16.0) * (avg1.rg + avg1.ba);\n" \
+    "    gl_FragColor.ba = (1.0/16.0) * (avg2.rg + avg2.ba);\n" \
     "}\n"
 
 // Balltrack shader third phase
@@ -110,22 +187,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     "uniform samplerExternalOES tex_camera;\n" \
     "uniform sampler2D tex_filter;\n" \
     "varying vec2 texcoord;\n" \
-    "uniform vec2 tex_unit;\n" \
     "void main(void) {\n" \
-    "    \n" \
     "    vec4 col = texture2D(tex_camera, texcoord);\n" \
-    "    float maxVal = 0.0;\n" \
-    "    //for (int i = -2; i <= 2; ++i) {\n" \
-    "    //for (int j = -2; j <= 2; ++j) {\n" \
-    "    //   vec4 p = texture2D(tex_filter, texcoord + vec2(i,j) * tex_unit);\n" \
-    "    //   maxVal = max(maxVal, p.a);\n" \
-    "    //}\n" \
-    "    //}\n" \
-    "    vec4 p = texture2D(tex_filter, texcoord + vec2(1,0) * tex_unit);\n" \
-    "    maxVal = p.a;\n" \
-    "    \n" \
-    "    if (maxVal > 0.5) {\n" \
-    "        gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);\n" \
+    "    vec4 fil = texture2D(tex_filter, texcoord);\n" \
+    "    // fil.rg is red/green filter for `left pixel'\n" \
+    "    // fil.ba is red/green filter for `right pixel'\n" \
+    "    if (0.5 * (fil.r + fil.b) > 0.5) {\n" \
+    "        gl_FragColor = 0.5 * col + 0.5 * vec4(1.0, 0.0, 1.0, 1.0);\n" \
+    "    } else if (0.5 * (fil.g + fil.a) > 0.5) {\n" \
+    "        gl_FragColor = 0.5 * col + 0.5 * vec4(0.0, 1.0, 0.0, 1.0);\n" \
     "    } else {\n" \
     "        gl_FragColor = col;\n" \
     "    }\n" \
@@ -133,12 +203,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Balltrack plain shader
 #define BALLTRACK_FSHADER_SOURCE_PLAIN \
-    "#extension GL_OES_EGL_image_external : require\n" \
-    "//uniform samplerExternalOES tex;\n" \
-    "uniform sampler2D tex;\n" \
+    "uniform vec4 col;\n" \
     "varying vec2 texcoord;\n" \
     "void main(void) {\n" \
-    "    vec4 col = texture2D(tex, texcoord);\n" \
     "    gl_FragColor = col;\n" \
     "}\n"
 
@@ -155,30 +222,11 @@ static GLuint rtt_tex2; // Texture for render-to-texture
 
 static uint8_t* pixelbuffer; // For reading out result
 
-// Divisions by 2 of 720p with correct aspect ratio
-// 1280,720
-//  640,360
-//  320,180
-//  160, 90
-//   80, 45
-
-// -- Source (1080p or 720p)
-static int width0  = 1280;
-static int height0 = 720;
-// -- From source to phase 1: (maintain 720p aspect ratio)
-static int width1  = 640;
-static int height1 = 360;
-// -- From phase 1 to phase 2: (maintain 720p aspect ratio)
-static int width2  = 80;
-static int height2 = 45;
-// -- From phase 2 to screen
-// state->width,state->height
-
 static RASPITEXUTIL_SHADER_PROGRAM_T balltrack_shader_1 =
 {
     .vertex_source = BALLTRACK_VSHADER_SOURCE,
     .fragment_source = BALLTRACK_FSHADER_SOURCE_1,
-    .uniform_names = {"tex"},
+    .uniform_names = {"tex", "tex_unit"},
     .attribute_names = {"vertex"},
 };
 
@@ -194,7 +242,7 @@ static RASPITEXUTIL_SHADER_PROGRAM_T balltrack_shader_3 =
 {
     .vertex_source = BALLTRACK_VSHADER_SOURCE,
     .fragment_source = BALLTRACK_FSHADER_SOURCE_3,
-    .uniform_names = {"tex_camera", "tex_unit", "tex_filter"},
+    .uniform_names = {"tex_camera", "tex_filter"},
     .attribute_names = {"vertex"},
 };
 
@@ -202,7 +250,7 @@ static RASPITEXUTIL_SHADER_PROGRAM_T balltrack_shader_plain =
 {
     .vertex_source = BALLTRACK_VSHADER_SOURCE,
     .fragment_source = BALLTRACK_FSHADER_SOURCE_PLAIN,
-    .uniform_names = {"tex"},
+    .uniform_names = {"col"},
     .attribute_names = {"vertex"},
 };
 
@@ -237,7 +285,7 @@ static int shader_set_uniforms(RASPITEXUTIL_SHADER_PROGRAM_T *shader,
    }
    
    if (extratex) {
-       GLCHK(glUniform1i(shader->uniform_locations[2], 1)); // Extra texture
+       GLCHK(glUniform1i(shader->uniform_locations[1], 1)); // Extra texture
    }
 
    /* Enable attrib 0 as vertex array */
@@ -245,13 +293,14 @@ static int shader_set_uniforms(RASPITEXUTIL_SHADER_PROGRAM_T *shader,
    return 0;
 }
 
-static GLuint createFilterTexture(int w, int h) {
+static GLuint createFilterTexture(int w, int h, GLint scaling) {
     GLuint id;
     GLCHK(glGenTextures(1, &id));
     glBindTexture(GL_TEXTURE_2D, id);
-    //Scaling: nearest (=no) interpolation for scaling down and up.
-    GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+    //Scaling: GL_NEAREST no interpolation for scaling down and up.
+    //Scaling: GL_LINEAR  interpolate between source pixels
+    GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, scaling));
+    GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, scaling));
     //Wrapping: repeat. Only use (s,t) as we are using a 2D texture
     GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT));
     GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT));
@@ -277,13 +326,15 @@ static int balltrack_init(RASPITEX_STATE *raspitex_state)
     if (rc != 0)
         goto end;
 
+    vcos_log_error("Building shader 1");
     rc = raspitexutil_build_shader_program(&balltrack_shader_1);
     if (rc != 0)
         goto end;
-    rc = shader_set_uniforms(&balltrack_shader_1, width0, height0, 0, 0);
+    rc = shader_set_uniforms(&balltrack_shader_1, width0, height0, 1, 0);
     if (rc != 0)
         goto end;
 
+    vcos_log_error("Building shader 2");
     rc = raspitexutil_build_shader_program(&balltrack_shader_2);
     if (rc != 0)
         goto end;
@@ -291,17 +342,16 @@ static int balltrack_init(RASPITEX_STATE *raspitex_state)
     if (rc != 0)
         goto end;
 
+    vcos_log_error("Building shader 3");
     rc = raspitexutil_build_shader_program(&balltrack_shader_3);
     if (rc != 0)
         goto end;
-    rc = shader_set_uniforms(&balltrack_shader_3, width2, height2, 1, 1);
+    rc = shader_set_uniforms(&balltrack_shader_3, width2, height2, 0, 1);
     if (rc != 0)
         goto end;
 
+    vcos_log_error("Building shader 4");
     rc = raspitexutil_build_shader_program(&balltrack_shader_plain);
-    if (rc != 0)
-        goto end;
-    rc = shader_set_uniforms(&balltrack_shader_plain, 0, 0, 0, 0);
     if (rc != 0)
         goto end;
 
@@ -318,8 +368,8 @@ static int balltrack_init(RASPITEX_STATE *raspitex_state)
     GLCHK(glBindFramebufferOES(GL_FRAMEBUFFER_OES, fbo));
     GLCHK(glBindFramebufferOES(GL_FRAMEBUFFER_OES, 0)); // unbind it
 
-    rtt_tex1 = createFilterTexture(width1, height1);
-    rtt_tex2 = createFilterTexture(width2, height2);
+    rtt_tex1 = createFilterTexture(width1, height1, GL_LINEAR);
+    rtt_tex2 = createFilterTexture(width2, height2, GL_NEAREST);
 
     GLCHK(glGenBuffers(1, &quad_vbo));
     GLCHK(glBindBuffer(GL_ARRAY_BUFFER, quad_vbo));
@@ -329,6 +379,28 @@ static int balltrack_init(RASPITEX_STATE *raspitex_state)
 end:
     return rc;
 }
+
+void draw_square(int x, int y, int l, uint32_t color) {
+    float r, g, b, a;
+    r = (1.0/255.0) * ((color      ) & 0xff);
+    g = (1.0/255.0) * ((color >>  8) & 0xff);
+    b = (1.0/255.0) * ((color >> 16) & 0xff);
+    a = (1.0/255.0) * ((color >> 24) & 0xff);
+
+    RASPITEXUTIL_SHADER_PROGRAM_T* shader = &balltrack_shader_plain;
+    GLCHK(glUseProgram(shader->program));
+    GLCHK(glUniform4f(shader->uniform_locations[0], r, g, b, a));
+    GLCHK(glEnableVertexAttribArray(shader->attribute_locations[0]));
+
+    GLCHK(glViewport(x - l / 2, y - l / 2, l, l));
+    // Bind the vertex buffer
+    GLCHK(glBindBuffer(GL_ARRAY_BUFFER, quad_vbo));
+    GLCHK(glEnableVertexAttribArray(shader->attribute_locations[0]));
+    GLCHK(glVertexAttribPointer(shader->attribute_locations[0], 2, GL_FLOAT, GL_FALSE, 0, 0));
+    // Draw
+    GLCHK(glDrawArrays(GL_TRIANGLES, 0, 6));
+}
+ 
 
 // If target_tex is zero, then target is the screen
 static int render_pass(RASPITEXUTIL_SHADER_PROGRAM_T* shader, GLuint source_type, GLuint source_tex, GLuint target_tex, int targetWidth, int targetHeight) {
@@ -357,9 +429,15 @@ static int render_pass(RASPITEXUTIL_SHADER_PROGRAM_T* shader, GLuint source_type
     return 0;
 }
 
+static int historyCount = 10;
+float ballX[60], ballY[60];
+static int ballCur = 0;
+
 static int balltrack_readout(int width, int height)
 {
     // Read texture
+    // It packs two pixels into one:
+    // RGBA is red,green,red,green filter values for neighbouring pixels
     if (pixelbuffer) {
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixelbuffer);
         if (glGetError() == GL_NO_ERROR) {
@@ -371,9 +449,18 @@ static int balltrack_readout(int width, int height)
             for (int i = 0; i < height; ++i) {
                 for (int j = 0; j < width; ++j) {
                     // R,G,B,A = FF, 00, FF, FF
-                    //if (*ptr++ == 0xffff00ff) {
-                    if ( ((*ptr++) & 0xff000000) == 0xff000000) {
-                        avgx += j;
+                    uint32_t rgba = *ptr++;
+                    int R1 = (rgba      ) & 0xff;
+                    int G1 = (rgba >>  8) & 0xff;
+                    int R2 = (rgba >> 16) & 0xff;
+                    int G2 = (rgba >> 24) & 0xff;
+                    if ( R1 > 128 ) {
+                        avgx += 2*j;
+                        avgy += i;
+                        count++;
+                    }
+                    if ( R2 > 128 ) {
+                        avgx += 2*j + 1;
                         avgy += i;
                         count++;
                     }
@@ -382,7 +469,13 @@ static int balltrack_readout(int width, int height)
             if (count) {
                 avgx /= count;
                 avgy /= count;
-                vcos_log_error("Average x,y is (%u, %u)!", avgx, avgy);
+                ballX[ballCur] = (float)avgx / (2.0 * (float)width);
+                ballY[ballCur] = (float)avgy / (float)height;
+                ++ballCur;
+                if(ballCur >= historyCount)
+                    ballCur = 0;
+                //vcos_log_error("Average x,y is (%u, %u)!", avgx, avgy);
+                return 1;
             }
         } else {
             vcos_log_error("glReadPixels failed!");
@@ -416,8 +509,17 @@ static int balltrack_redraw(RASPITEX_STATE* state)
     GLCHK(glBindTexture(GL_TEXTURE_2D, rtt_tex2));
     render_pass(&balltrack_shader_3, GL_TEXTURE_EXTERNAL_OES, state->texture, 0, width, height);
 
-    // Debug shader to draw a texture
-    //render_pass(&balltrack_shader_plain, GL_TEXTURE_2D, rtt_tex1, 0, width, height);
+#if 0
+    for (int i = 0; i < historyCount; ++i) {
+        int time = (ballCur - i + historyCount) % historyCount;
+        int green = 0xff - 10 * time;
+        // The bytes are R,G,B,A but little-endian so 0xAABBGGRR
+        // We want 0xff00gg00
+        int color = 0xff000000 | (green << 8);
+        draw_square(width * ballX[i], height * ballY[i], 12, color);
+    }
+#endif
+
     return 0;
 }
 
