@@ -108,7 +108,7 @@ static int height2 = 45;
     "    gl_FragColor.g = 0.0;\n" \
     "    if (col1.g == value1) {\n" \
     "        float hue = (col1.b - col1.r) / chroma1;\n" \
-    "        if (hue > 0.25 && hue < 0.75 && sat1 > 0.10 && sat1 < 0.95 && value1 > 0.45 && value1 < 0.98 ) {\n" \
+    "        if (hue > -0.95 && hue < 0.95 && sat1 > 0.10 && sat1 < 0.95 && value1 > 0.45 && value1 < 0.98 ) {\n" \
     "           gl_FragColor.g = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -126,7 +126,7 @@ static int height2 = 45;
     "    gl_FragColor.a = 0.0;\n" \
     "    if (col2.g == value2) {\n" \
     "        float hue = (col2.b - col2.r) / chroma2;\n" \
-    "        if (hue > 0.25 && hue < 0.75 && sat2 > 0.10 && sat2 < 0.95 && value2 > 0.45 && value2 < 0.98 ) {\n" \
+    "        if (hue > -0.95 && hue < 0.95 && sat2 > 0.10 && sat2 < 0.95 && value2 > 0.45 && value2 < 0.98 ) {\n" \
     "           gl_FragColor.a = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -380,7 +380,8 @@ end:
     return rc;
 }
 
-void draw_square(int x, int y, int l, uint32_t color) {
+// !!  x,y are coordinates in [-1,1]x[-1,1] range  !!
+void draw_square(float xmin, float xmax, float ymin, float ymax, uint32_t color) {
     float r, g, b, a;
     r = (1.0/255.0) * ((color      ) & 0xff);
     g = (1.0/255.0) * ((color >>  8) & 0xff);
@@ -390,15 +391,26 @@ void draw_square(int x, int y, int l, uint32_t color) {
     RASPITEXUTIL_SHADER_PROGRAM_T* shader = &balltrack_shader_plain;
     GLCHK(glUseProgram(shader->program));
     GLCHK(glUniform4f(shader->uniform_locations[0], r, g, b, a));
-    GLCHK(glEnableVertexAttribArray(shader->attribute_locations[0]));
 
-    GLCHK(glViewport(x - l / 2, y - l / 2, l, l));
-    // Bind the vertex buffer
-    GLCHK(glBindBuffer(GL_ARRAY_BUFFER, quad_vbo));
+    // Draw a square
+    GLfloat vertexBuffer[5][2];
+    vertexBuffer[0][0]= xmin;
+    vertexBuffer[0][1]= ymin;
+    vertexBuffer[1][0]= xmax;
+    vertexBuffer[1][1]= ymin;
+    vertexBuffer[2][0]= xmax;
+    vertexBuffer[2][1]= ymax;
+    vertexBuffer[3][0]= xmin;
+    vertexBuffer[3][1]= ymax;
+    vertexBuffer[4][0]= xmin;
+    vertexBuffer[4][1]= ymin;
+
+    // Unbind the vertex buffer --> use client memory
+    GLCHK(glBindBuffer(GL_ARRAY_BUFFER, 0));
     GLCHK(glEnableVertexAttribArray(shader->attribute_locations[0]));
-    GLCHK(glVertexAttribPointer(shader->attribute_locations[0], 2, GL_FLOAT, GL_FALSE, 0, 0));
+    GLCHK(glVertexAttribPointer(shader->attribute_locations[0], 2, GL_FLOAT, GL_FALSE, 0, vertexBuffer));
     // Draw
-    GLCHK(glDrawArrays(GL_TRIANGLES, 0, 6));
+    GLCHK(glDrawArrays(GL_LINE_STRIP, 0, 5));
 }
  
 
@@ -429,9 +441,11 @@ static int render_pass(RASPITEXUTIL_SHADER_PROGRAM_T* shader, GLuint source_type
     return 0;
 }
 
+// All [-1,1]x[-1,1] coordinates
 static int historyCount = 10;
 float ballX[60], ballY[60];
 static int ballCur = 0;
+float greenxmin, greenxmax, greenymin, greenymax;
 
 static int balltrack_readout(int width, int height)
 {
@@ -444,6 +458,10 @@ static int balltrack_readout(int width, int height)
             // pixelbuffer[i*height + j] is i pixels from bottom and j from left
             uint32_t avgx = 0, avgy = 0;
             uint32_t count = 0;
+            uint32_t gxmin = (uint32_t)(0.45f * 2.0f * width);
+            uint32_t gxmax = (uint32_t)(0.55f * 2.0f * width);
+            uint32_t gymin = (uint32_t)(0.45f * height);
+            uint32_t gymax = (uint32_t)(0.55f * height);
 
             uint32_t* ptr = (uint32_t*)pixelbuffer;
             for (int i = 0; i < height; ++i) {
@@ -454,23 +472,48 @@ static int balltrack_readout(int width, int height)
                     int G1 = (rgba >>  8) & 0xff;
                     int R2 = (rgba >> 16) & 0xff;
                     int G2 = (rgba >> 24) & 0xff;
+
+                    int y = i;
+                    int x1 = 2*j;
+                    int x2 = 2*j + 1;
                     if ( R1 > 128 ) {
-                        avgx += 2*j;
-                        avgy += i;
+                        avgx += x1;
+                        avgy += y;
                         count++;
                     }
                     if ( R2 > 128 ) {
-                        avgx += 2*j + 1;
-                        avgy += i;
+                        avgx += x2;
+                        avgy += y;
                         count++;
+                    }
+                    // This part could be optimized...
+                    // - y min/max check only once
+                    // - if x1<gxmin then x2 does not need to be checked
+                    // - ...
+                    if (G1 > 128) {
+                        if (x1 < gxmin) gxmin = x1;
+                        if (x1 > gxmax) gxmax = x1;
+                        if (y < gymin) gymin = y;
+                        if (y > gymax) gymax = y;
+                    }
+                    if (G2 > 128) {
+                        if (x2 < gxmin) gxmin = x2;
+                        if (x2 > gxmax) gxmax = x2;
+                        if (y < gymin) gymin = y;
+                        if (y > gymax) gymax = y;
                     }
                 }
             }
+            // Map to [-1,1]
+            greenxmin = gxmin / ((float)width) - 1.0f;
+            greenxmax = gxmax / ((float)width) - 1.0f;
+            greenymin = (2.0f * gymin) / ((float)height) - 1.0f;
+            greenymax = (2.0f * gymax) / ((float)height) - 1.0f;
             if (count) {
                 avgx /= count;
                 avgy /= count;
-                ballX[ballCur] = (float)avgx / (2.0 * (float)width);
-                ballY[ballCur] = (float)avgy / (float)height;
+                ballX[ballCur] = (float)avgx / (float)width - 1.0f;
+                ballY[ballCur] = (2.0f * avgy) / (float)height - 1.0f;
                 ++ballCur;
                 if(ballCur >= historyCount)
                     ballCur = 0;
@@ -509,14 +552,17 @@ static int balltrack_redraw(RASPITEX_STATE* state)
     GLCHK(glBindTexture(GL_TEXTURE_2D, rtt_tex2));
     render_pass(&balltrack_shader_3, GL_TEXTURE_EXTERNAL_OES, state->texture, 0, width, height);
 
-#if 0
+#if 1
+    draw_square(greenxmin, greenxmax, greenymin, greenymax, 0xff00ff00);
+#endif
+
+#if 1
     for (int i = 0; i < historyCount; ++i) {
         int time = (ballCur - i + historyCount) % historyCount;
-        int green = 0xff - 10 * time;
+        int blue = 0xff - 10 * time;
         // The bytes are R,G,B,A but little-endian so 0xAABBGGRR
-        // We want 0xff00gg00
-        int color = 0xff000000 | (green << 8);
-        draw_square(width * ballX[i], height * ballY[i], 12, color);
+        int color = 0xff000000 | (blue << 24);
+        draw_square(ballX[i] - 0.05f, ballX[i] + 0.05f, ballY[i] - 0.1f, ballY[i] + 0.1f, color);
     }
 #endif
 
