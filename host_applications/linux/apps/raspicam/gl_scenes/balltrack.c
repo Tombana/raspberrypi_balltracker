@@ -101,14 +101,14 @@ static int height2 = 45;
     "    gl_FragColor.r = 0.0;\n" \
     "    if (col1.r == value1) {\n" \
     "        float hue = (col1.g - col1.b) / chroma1;\n" \
-    "        if (hue > -0.30 && hue < 1.0 && sat1 > 0.10 && sat1 < 0.95 && value1 > 0.45 && value1 < 0.98 ) {\n" \
+    "        if (hue > 0.20 && hue < 0.4 && sat1 > 0.40 && sat1 < 0.95 && value1 > 0.45 && value1 < 0.98 ) {\n" \
     "           gl_FragColor.r = 1.0;\n" \
     "        }\n" \
     "    }\n" \
     "    gl_FragColor.g = 0.0;\n" \
     "    if (col1.g == value1) {\n" \
     "        float hue = (col1.b - col1.r) / chroma1;\n" \
-    "        if (hue > -0.95 && hue < 0.95 && sat1 > 0.10 && sat1 < 0.95 && value1 > 0.45 && value1 < 0.98 ) {\n" \
+    "        if (hue > -0.95 && hue < 0.95 && sat1 > 0.10 && sat1 < 0.95 && value1 > 0.15 && value1 < 0.98 ) {\n" \
     "           gl_FragColor.g = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -119,14 +119,14 @@ static int height2 = 45;
     "    gl_FragColor.b = 0.0;\n" \
     "    if (col2.r == value2) {\n" \
     "        float hue = (col2.g - col2.b) / chroma2;\n" \
-    "        if (hue > -0.30 && hue < 1.0 && sat2 > 0.10 && sat2 < 0.95 && value2 > 0.45 && value2 < 0.98 ) {\n" \
+    "        if (hue > 0.20 && hue < 0.4 && sat2 > 0.40 && sat2 < 0.95 && value2 > 0.45 && value2 < 0.98 ) {\n" \
     "           gl_FragColor.b = 1.0;\n" \
     "        }\n" \
     "    }\n" \
     "    gl_FragColor.a = 0.0;\n" \
     "    if (col2.g == value2) {\n" \
     "        float hue = (col2.b - col2.r) / chroma2;\n" \
-    "        if (hue > -0.95 && hue < 0.95 && sat2 > 0.10 && sat2 < 0.95 && value2 > 0.45 && value2 < 0.98 ) {\n" \
+    "        if (hue > -0.95 && hue < 0.95 && sat2 > 0.10 && sat2 < 0.95 && value2 > 0.15 && value2 < 0.98 ) {\n" \
     "           gl_FragColor.a = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -194,8 +194,8 @@ static int height2 = 45;
     "    // fil.ba is red/green filter for `right pixel'\n" \
     "    if (0.5 * (fil.r + fil.b) > 0.5) {\n" \
     "        gl_FragColor = 0.5 * col + 0.5 * vec4(1.0, 0.0, 1.0, 1.0);\n" \
-    "    } else if (0.5 * (fil.g + fil.a) > 0.5) {\n" \
-    "        gl_FragColor = 0.5 * col + 0.5 * vec4(0.0, 1.0, 0.0, 1.0);\n" \
+    "    } else if (0.5 * (fil.g + fil.a) > 0.75) {\n" \
+    "        gl_FragColor = 0.9 * col + 0.1 * vec4(0.0, 1.0, 0.0, 1.0);\n" \
     "    } else {\n" \
     "        gl_FragColor = col;\n" \
     "    }\n" \
@@ -442,7 +442,7 @@ static int render_pass(RASPITEXUTIL_SHADER_PROGRAM_T* shader, GLuint source_type
 }
 
 // All [-1,1]x[-1,1] coordinates
-static int historyCount = 10;
+static int historyCount = 30;
 float ballX[60], ballY[60];
 static int ballCur = 0;
 float greenxmin, greenxmax, greenymin, greenymax;
@@ -468,39 +468,56 @@ static int balltrack_readout(int width, int height)
                 for (int j = 0; j < width; ++j) {
                     // R,G,B,A = FF, 00, FF, FF
                     uint32_t rgba = *ptr++;
-                    int R1 = (rgba      ) & 0xff;
+                    //int R1 = (rgba      ) & 0xff;
                     int G1 = (rgba >>  8) & 0xff;
-                    int R2 = (rgba >> 16) & 0xff;
+                    //int R2 = (rgba >> 16) & 0xff;
                     int G2 = (rgba >> 24) & 0xff;
 
                     int y = i;
                     int x1 = 2*j;
                     int x2 = 2*j + 1;
-                    if ( R1 > 128 ) {
-                        avgx += x1;
-                        avgy += y;
-                        count++;
-                    }
-                    if ( R2 > 128 ) {
-                        avgx += x2;
-                        avgy += y;
-                        count++;
-                    }
                     // This part could be optimized...
                     // - y min/max check only once
                     // - if x1<gxmin then x2 does not need to be checked
                     // - ...
-                    if (G1 > 128) {
+                    if (G1 > 172) {
                         if (x1 < gxmin) gxmin = x1;
                         if (x1 > gxmax) gxmax = x1;
                         if (y < gymin) gymin = y;
                         if (y > gymax) gymax = y;
                     }
-                    if (G2 > 128) {
+                    if (G2 > 172) {
                         if (x2 < gxmin) gxmin = x2;
                         if (x2 > gxmax) gxmax = x2;
                         if (y < gymin) gymin = y;
                         if (y > gymax) gymax = y;
+                    }
+                }
+            }
+	    ptr = (uint32_t*)pixelbuffer;
+            for (int i = 0; i < height; ++i) {
+                for (int j = 0; j < width; ++j) {
+                    // R,G,B,A = FF, 00, FF, FF
+                    uint32_t rgba = *ptr++;
+                    int R1 = (rgba      ) & 0xff;
+                    //int G1 = (rgba >>  8) & 0xff;
+                    int R2 = (rgba >> 16) & 0xff;
+                    //int G2 = (rgba >> 24) & 0xff;
+
+                    int y = i;
+                    int x1 = 2*j;
+                    int x2 = 2*j + 1;
+		    if ( y < gymin || y > gymax ) continue;
+		    if ( x1 < gxmin || x2 > gxmax ) continue;
+                    if ( R1 > 64 ) {
+                        avgx += x1;
+                        avgy += y;
+                        count++;
+                    }
+                    if ( R2 > 64 ) {
+                        avgx += x2;
+                        avgy += y;
+                        count++;
                     }
                 }
             }
@@ -512,8 +529,8 @@ static int balltrack_readout(int width, int height)
             if (count) {
                 avgx /= count;
                 avgy /= count;
-                ballX[ballCur] = (float)avgx / (float)width - 1.0f;
-                ballY[ballCur] = (2.0f * avgy) / (float)height - 1.0f;
+                ballX[ballCur] = ((float)avgx) / ((float)width) - 1.0f;
+                ballY[ballCur] = (2.0f * ((float)avgy)) / ((float)height) - 1.0f;
                 ++ballCur;
                 if(ballCur >= historyCount)
                     ballCur = 0;
@@ -559,10 +576,11 @@ static int balltrack_redraw(RASPITEX_STATE* state)
 #if 1
     for (int i = 0; i < historyCount; ++i) {
         int time = (ballCur - i + historyCount) % historyCount;
-        int blue = 0xff - 10 * time;
+        int blue = 0xff - time;
         // The bytes are R,G,B,A but little-endian so 0xAABBGGRR
-        int color = 0xff000000 | (blue << 24);
-        draw_square(ballX[i] - 0.05f, ballX[i] + 0.05f, ballY[i] - 0.1f, ballY[i] + 0.1f, color);
+        int color = 0xff000000 | (blue << 16);
+	float size = 0.002f * time;
+        draw_square(ballX[i] - 0.5f * size, ballX[i] + 0.5f * size, ballY[i] - size, ballY[i] + size, color);
     }
 #endif
 
