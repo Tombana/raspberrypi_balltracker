@@ -46,8 +46,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "BalltrackCore.h"
 
-#define IMAGE_SIZE_WIDTH 1920
-#define IMAGE_SIZE_HEIGHT 1080
+// This has to be exactly the size of the file that is being played
+// TODO: Determine from file
+
+//#define IMAGE_SIZE_WIDTH 1920
+//#define IMAGE_SIZE_HEIGHT 1080
+#define IMAGE_SIZE_WIDTH 1280
+#define IMAGE_SIZE_HEIGHT 720
 
 #ifndef M_PI
    #define M_PI 3.141592654
@@ -315,8 +320,14 @@ static void exit_func(void)
 
 //==============================================================================
 
-int main ()
+extern char* filename;
+
+int main (int argc, char **argv)
 {
+    if (argc >= 2) {
+        filename = argv[1];
+    }
+
    bcm_host_init();
    printf("Note: ensure you have sufficient gpu_mem configured\n");
 
