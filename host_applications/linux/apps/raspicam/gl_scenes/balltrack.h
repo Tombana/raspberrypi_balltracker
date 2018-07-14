@@ -32,6 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "RaspiTex.h"
 
+// Called from RaspiBalls.c
 int balltrack_open(RASPITEX_STATE *state);
 
 #endif /* BALLTRACK_H */

@@ -22,7 +22,7 @@ set (COMMON_SOURCES
    RaspiPreview.c)
 
 add_executable(raspistill ${COMMON_SOURCES} RaspiStill.c  RaspiTex.c RaspiTexUtil.c tga.c ${GL_SCENE_SOURCES})
-add_executable(raspiballs ${COMMON_SOURCES} RaspiBalls.c  RaspiTex.c RaspiTexUtil.c tga.c ${GL_SCENE_SOURCES} gl_scenes/balltrack.c)
+add_executable(raspiballs ${COMMON_SOURCES} RaspiBalls.c  RaspiTex.c RaspiTexUtil.c tga.c ${GL_SCENE_SOURCES} gl_scenes/balltrack.c BalltrackCore.c BalltrackUtil.c)
 add_executable(raspiyuv   ${COMMON_SOURCES} RaspiStillYUV.c)
 add_executable(raspivid   ${COMMON_SOURCES} RaspiVid.c)
 add_executable(raspividyuv  ${COMMON_SOURCES} RaspiVidYUV.c)

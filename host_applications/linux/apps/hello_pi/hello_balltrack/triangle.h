@@ -1,8 +1,6 @@
 /*
-Copyright (c) 2013, Broadcom Europe Ltd
-Copyright (c) 2013, Tim Gover
+Copyright (c) 2012, Broadcom Europe Ltd
 All rights reserved.
-
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -26,57 +24,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-
-#include "BalltrackCore.h"
-#include "RaspiTex.h"
-#include "RaspiTexUtil.h"
-#include <GLES2/gl2.h>
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
+#pragma once
 
 
-static const EGLint balltrack_egl_config_attribs[] =
-{
-   EGL_RED_SIZE,   8,
-   EGL_GREEN_SIZE, 8,
-   EGL_BLUE_SIZE,  8,
-   EGL_ALPHA_SIZE, 8,
-   EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-   EGL_NONE
-};
-
-/**
- * Creates the OpenGL ES 2.X context and builds the shaders.
- * @param raspitex_state A pointer to the GL preview state.
- * @return Zero if successful.
- */
-static int balltrack_init(RASPITEX_STATE *raspitex_state)
-{
-    vcos_log_trace("%s", VCOS_FUNCTION);
-    raspitex_state->egl_config_attribs = balltrack_egl_config_attribs;
-    int rc = raspitexutil_gl_init_2_0(raspitex_state);
-    if (rc != 0)
-        return rc;
-
-    return balltrack_core_init(1);
-}
-
-/* Redraws the scene with the latest luma buffer.
- *
- * @param raspitex_state A pointer to the GL preview state.
- * @return Zero if successful.
- */
-static int balltrack_redraw(RASPITEX_STATE* state)
-{
-    return balltrack_core_redraw(state->width, state->height, state->texture, GL_TEXTURE_EXTERNAL_OES);
-}
-
-int balltrack_open(RASPITEX_STATE *state)
-{
-   state->ops.gl_init = balltrack_init;
-   state->ops.redraw = balltrack_redraw;
-   //state->ops.update_y_texture = raspitexutil_update_y_texture;
-   state->ops.update_texture = raspitexutil_update_texture;
-   return 0;
-}
-
+void* video_decode_test(void* arg);
