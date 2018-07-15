@@ -515,6 +515,8 @@ static int balltrack_readout(int width, int height) {
                     }
                 }
             }
+	    gxmin -= 3;
+	    gxmax += 3;
             ptr = (uint32_t*)pixelbuffer;
             for (int i = 0; i < height; ++i) {
                 for (int j = 0; j < width; ++j) {
