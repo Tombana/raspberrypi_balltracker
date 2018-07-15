@@ -58,7 +58,7 @@ static int balltrack_init(RASPITEX_STATE *raspitex_state)
     if (rc != 0)
         return rc;
 
-    return balltrack_core_init(1);
+    return balltrack_core_init(1, 0);
 }
 
 /* Redraws the scene with the latest luma buffer.

@@ -107,7 +107,7 @@ char BALLTRACK_FSHADER_SOURCE_1[] =  \
     "    gl_FragColor.r = 0.0;\n" \
     "    if (col1.r == value1) {\n" \
     "        float hue = (col1.g - col1.b) / chroma1;\n" \
-    "        if (hue > 0.20 && hue < 0.45 && sat1 > 0.40 && sat1 < 0.95 && value1 > 0.60 && value1 < 0.98 ) {\n" \
+    "        if (hue > 0.20 && hue < 0.45 && sat1 > 0.40 && sat1 < 0.95 && value1 > 0.40 && value1 < 0.98 ) {\n" \
     "           gl_FragColor.r = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -125,7 +125,7 @@ char BALLTRACK_FSHADER_SOURCE_1[] =  \
     "    gl_FragColor.b = 0.0;\n" \
     "    if (col2.r == value2) {\n" \
     "        float hue = (col2.g - col2.b) / chroma2;\n" \
-    "        if (hue > 0.20 && hue < 0.45 && sat2 > 0.40 && sat2 < 0.95 && value2 > 0.60 && value2 < 0.98 ) {\n" \
+    "        if (hue > 0.20 && hue < 0.45 && sat2 > 0.40 && sat2 < 0.95 && value2 > 0.40 && value2 < 0.98 ) {\n" \
     "           gl_FragColor.b = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -467,6 +467,7 @@ static int historyCount = 10;
 GLfloat ballXYs[60][2];
 static int ballCur = 0;
 float greenxmin, greenxmax, greenymin, greenymax;
+static int ballGone = 0;
 
 static int balltrack_readout(int width, int height) {
     // Read texture
@@ -500,13 +501,13 @@ static int balltrack_readout(int width, int height) {
                     // - y min/max check only once
                     // - if x1<gxmin then x2 does not need to be checked
                     // - ...
-                    if (G1 > 172) {
+                    if (G1 > 128) {
                         if (x1 < gxmin) gxmin = x1;
                         if (x1 > gxmax) gxmax = x1;
                         if (y < gymin) gymin = y;
                         if (y > gymax) gymax = y;
                     }
-                    if (G2 > 172) {
+                    if (G2 > 128) {
                         if (x2 < gxmin) gxmin = x2;
                         if (x2 > gxmax) gxmax = x2;
                         if (y < gymin) gymin = y;
@@ -529,12 +530,12 @@ static int balltrack_readout(int width, int height) {
                     int x2 = 2*j + 1;
                     if ( y < gymin || y > gymax ) continue;
                     if ( x1 < gxmin || x2 > gxmax ) continue;
-                    if ( R1 >= 172 ) {
+                    if ( R1 >= 128 ) {
                         avgx += x1;
                         avgy += y;
                         count++;
                     }
-                    if ( R2 >= 172 ) {
+                    if ( R2 >= 128 ) {
                         avgx += x2;
                         avgy += y;
                         count++;
@@ -547,6 +548,7 @@ static int balltrack_readout(int width, int height) {
             greenymin = (2.0f * gymin) / ((float)height) - 1.0f;
             greenymax = (2.0f * gymax) / ((float)height) - 1.0f;
             if (count) {
+		ballGone = 0;
                 avgx /= count;
                 avgy /= count;
                 ballXYs[ballCur][0] = ((float)avgx) / ((float)width) - 1.0f;
@@ -556,7 +558,19 @@ static int balltrack_readout(int width, int height) {
                     ballCur = 0;
                 //printf("Average x,y is (%u, %u)!", avgx, avgy);
                 return 1;
-            }
+            } else {
+		if (ballGone++ == 30) {
+			printf("Ball has gone for 30 frames!\n");
+			int i = ballCur - 1;
+			if (i < 0) i = historyCount - 1;
+			if (ballXYs[i][0] < greenxmin + (greenxmax - greenxmin) / 3.0f) {
+				printf("Goal for red!\n");
+			}
+			if (ballXYs[i][0] > greenxmin + 2.0f * (greenxmax - greenxmin) / 3.0f) {
+				printf("Goal for blue!\n");
+			}
+		}	
+	    }
         } else {
             printf("glReadPixels failed!");
         }
