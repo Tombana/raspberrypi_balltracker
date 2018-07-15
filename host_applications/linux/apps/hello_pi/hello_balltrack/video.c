@@ -41,6 +41,7 @@ static COMPONENT_T* egl_render = NULL;
 static void* eglImage = 0;
 
 char* filename = "/opt/vc/src/hello_pi/hello_video/test.h264";
+int fps = 30;
 
 void my_fill_buffer_done(void* data, COMPONENT_T* comp)
 {
@@ -141,6 +142,9 @@ void *video_decode_test(void* arg)
    format.nVersion.nVersion = OMX_VERSION;
    format.nPortIndex = 130;
    format.eCompressionFormat = OMX_VIDEO_CodingAVC;
+
+   // set framerate - if not it seems to use 30 as default
+   format.xFramerate = fps << 16;
 
    if(status == 0 &&
       OMX_SetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamVideoPortFormat, &format) == OMX_ErrorNone &&

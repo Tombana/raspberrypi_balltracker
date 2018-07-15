@@ -188,7 +188,7 @@ static void init_ogl(STATE_T *state)
    //glMatrixMode(GL_MODELVIEW);
 
    printf("Initializing balltracking shaders.\n");
-   balltrack_core_init(0);
+   balltrack_core_init(0, 1);
 
    printf("OpenGL initialized.\n");
 }
@@ -321,11 +321,15 @@ static void exit_func(void)
 //==============================================================================
 
 extern char* filename;
+extern int fps;
 
 int main (int argc, char **argv)
 {
     if (argc >= 2) {
         filename = argv[1];
+    }
+    if (argc >= 3) {
+        fps = atoi(argv[2]);
     }
 
    bcm_host_init();

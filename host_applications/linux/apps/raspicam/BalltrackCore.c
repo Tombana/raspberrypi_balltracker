@@ -59,6 +59,15 @@ static int height2 = 45;
     "   texcoord = 0.5 * (vertex + 1.0);\n" \
     "   gl_Position = vec4(vertex, 0.0, 1.0);\n" \
     "}\n"
+#define BALLTRACK_VSHADER_YFLIP_SOURCE \
+    "attribute vec2 vertex;\n" \
+    "varying vec2 texcoord;\n" \
+    "void main(void) {\n" \
+    "   texcoord.x = 0.5 * (1.0 + vertex.x);\n" \
+    "   texcoord.y = 0.5 * (1.0 - vertex.y);\n" \
+    "   gl_Position = vec4(vertex, 0.0, 1.0);\n" \
+    "}\n"
+
 
 // The output pixel coordinate (=texcoord) is always the center of an output pixel.
 
@@ -78,6 +87,8 @@ static int height2 = 45;
 // Ball range:  Hue 
 // Field range: Hue: 135-175
 //                   2.25-2.75
+//                   125 - 150
+//                   2.1 - 2.5
 char BALLTRACK_FSHADER_SOURCE_1[] =  \
     "#extension GL_OES_EGL_image_external : require\n" \
     "uniform samplerExternalOES tex;\n" \
@@ -96,14 +107,14 @@ char BALLTRACK_FSHADER_SOURCE_1[] =  \
     "    gl_FragColor.r = 0.0;\n" \
     "    if (col1.r == value1) {\n" \
     "        float hue = (col1.g - col1.b) / chroma1;\n" \
-    "        if (hue > 0.20 && hue < 0.4 && sat1 > 0.40 && sat1 < 0.95 && value1 > 0.45 && value1 < 0.98 ) {\n" \
+    "        if (hue > 0.20 && hue < 0.45 && sat1 > 0.40 && sat1 < 0.95 && value1 > 0.60 && value1 < 0.98 ) {\n" \
     "           gl_FragColor.r = 1.0;\n" \
     "        }\n" \
     "    }\n" \
     "    gl_FragColor.g = 0.0;\n" \
     "    if (col1.g == value1) {\n" \
     "        float hue = (col1.b - col1.r) / chroma1;\n" \
-    "        if (hue > -0.95 && hue < 0.95 && sat1 > 0.10 && sat1 < 0.95 && value1 > 0.15 && value1 < 0.98 ) {\n" \
+    "        if (hue > 0.0 && hue < 0.6 && sat1 > 0.15 && sat1 < 0.75 && value1 > 0.15 && value1 < 0.75 ) {\n" \
     "           gl_FragColor.g = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -114,14 +125,14 @@ char BALLTRACK_FSHADER_SOURCE_1[] =  \
     "    gl_FragColor.b = 0.0;\n" \
     "    if (col2.r == value2) {\n" \
     "        float hue = (col2.g - col2.b) / chroma2;\n" \
-    "        if (hue > 0.20 && hue < 0.4 && sat2 > 0.40 && sat2 < 0.95 && value2 > 0.45 && value2 < 0.98 ) {\n" \
+    "        if (hue > 0.20 && hue < 0.45 && sat2 > 0.40 && sat2 < 0.95 && value2 > 0.60 && value2 < 0.98 ) {\n" \
     "           gl_FragColor.b = 1.0;\n" \
     "        }\n" \
     "    }\n" \
     "    gl_FragColor.a = 0.0;\n" \
     "    if (col2.g == value2) {\n" \
     "        float hue = (col2.b - col2.r) / chroma2;\n" \
-    "        if (hue > -0.95 && hue < 0.95 && sat2 > 0.10 && sat2 < 0.95 && value2 > 0.15 && value2 < 0.98 ) {\n" \
+    "        if (hue > 0.0 && hue < 0.6 && sat2 > 0.15 && sat2 < 0.75 && value2 > 0.15 && value2 < 0.75 ) {\n" \
     "           gl_FragColor.a = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -180,6 +191,7 @@ char BALLTRACK_FSHADER_SOURCE_1[] =  \
 char BALLTRACK_FSHADER_SOURCE_3[] =  \
     "#extension GL_OES_EGL_image_external : require\n" \
     "uniform samplerExternalOES tex_camera;\n" \
+    "uniform vec2 tex_unit;\n" \
     "uniform sampler2D tex_filter;\n" \
     "varying vec2 texcoord;\n" \
     "void main(void) {\n" \
@@ -187,10 +199,18 @@ char BALLTRACK_FSHADER_SOURCE_3[] =  \
     "    vec4 fil = texture2D(tex_filter, texcoord);\n" \
     "    // fil.rg is red/green filter for `left pixel'\n" \
     "    // fil.ba is red/green filter for `right pixel'\n" \
-    "    if (0.5 * (fil.r + fil.b) > 0.5) {\n" \
-    "        gl_FragColor = 0.5 * col + 0.5 * vec4(1.0, 0.0, 1.0, 1.0);\n" \
-    "    } else if (0.5 * (fil.g + fil.a) > 0.75) {\n" \
-    "        gl_FragColor = 0.9 * col + 0.1 * vec4(0.0, 1.0, 0.0, 1.0);\n" \
+    "    float r, g;\n" \
+    "    if ( mod(texcoord.x, tex_unit.x) > 0.5 * tex_unit.x ) {\n" \
+    "        r = fil.r;\n" \
+    "        g = fil.g;\n" \
+    "    } else {\n" \
+    "        r = fil.b;\n" \
+    "        g = fil.a;\n" \
+    "    }\n" \
+    "    if (r > (172.0 / 256.0)) {\n" \
+    "        gl_FragColor = 0.3 * col + 0.7 * vec4(1.0, 0.0, 1.0, 1.0);\n" \
+    "    } else if (g > 0.75) {\n" \
+    "        gl_FragColor = 0.8 * col + 0.2 * vec4(0.0, 1.0, 0.0, 1.0);\n" \
     "    } else {\n" \
     "        gl_FragColor = col;\n" \
     "    }\n" \
@@ -237,7 +257,7 @@ static SHADER_PROGRAM_T balltrack_shader_3 =
 {
     .vertex_source = BALLTRACK_VSHADER_SOURCE,
     .fragment_source = BALLTRACK_FSHADER_SOURCE_3,
-    .uniform_names = {"tex_camera", "tex_filter"},
+    .uniform_names = {"tex_camera", "tex_unit", "tex_filter"},
     .attribute_names = {"vertex"},
 };
 
@@ -269,7 +289,7 @@ static int shader_set_uniforms(SHADER_PROGRAM_T *shader,
    }
    
    if (extratex) {
-       GLCHK(glUniform1i(shader->uniform_locations[1], 1)); // Extra texture
+       GLCHK(glUniform1i(shader->uniform_locations[2], 1)); // Extra texture
    }
 
    /* Enable attrib 0 as vertex array */
@@ -292,7 +312,7 @@ static GLuint createFilterTexture(int w, int h, GLint scaling) {
     return id;
 }
 
-int balltrack_core_init(int externalSamplerExtension)
+int balltrack_core_init(int externalSamplerExtension, int flipY)
 {
     int rc = 0;
 
@@ -307,6 +327,16 @@ int balltrack_core_init(int externalSamplerExtension)
         if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_3, "samplerExternalOES"))){
             memcpy(pos, "sampler2D         ", 18);
         }
+    }
+
+    // Camera source is Y-flipped.
+    // So flip it back in the vertex shader
+    if (flipY) {
+        // TODO:
+        // Do not flip the render-to-texture textures ??
+        //balltrack_shader_1.vertex_source = BALLTRACK_VSHADER_YFLIP_SOURCE;
+        //balltrack_shader_2.vertex_source = BALLTRACK_VSHADER_YFLIP_SOURCE;
+        //balltrack_shader_3.vertex_source = BALLTRACK_VSHADER_YFLIP_SOURCE;
     }
 
     printf("Building shader 1\n");
@@ -329,7 +359,7 @@ int balltrack_core_init(int externalSamplerExtension)
     rc = balltrack_build_shader_program(&balltrack_shader_3);
     if (rc != 0)
         goto end;
-    rc = shader_set_uniforms(&balltrack_shader_3, width2, height2, 0, 1);
+    rc = shader_set_uniforms(&balltrack_shader_3, width2, height2, 1, 1);
     if (rc != 0)
         goto end;
 
@@ -363,12 +393,13 @@ int balltrack_core_init(int externalSamplerExtension)
     //GLCHK(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
     GLCHK(glClearColor(0.15f, 0.25f, 0.35f, 1.0f));
 
+    GLCHK(glDisable(GL_BLEND));
 end:
     return rc;
 }
 
-// !!  x,y are coordinates in [-1,1]x[-1,1] range  !!
-void draw_square(float xmin, float xmax, float ymin, float ymax, uint32_t color) {
+// x,y are coordinates in [-1,1]x[-1,1] range
+void draw_line_strip(GLfloat* xys, int count, uint32_t color) {
     float r, g, b, a;
     r = (1.0/255.0) * ((color      ) & 0xff);
     g = (1.0/255.0) * ((color >>  8) & 0xff);
@@ -379,6 +410,16 @@ void draw_square(float xmin, float xmax, float ymin, float ymax, uint32_t color)
     GLCHK(glUseProgram(shader->program));
     GLCHK(glUniform4f(shader->uniform_locations[0], r, g, b, a));
 
+    // Unbind the vertex buffer --> use client memory
+    GLCHK(glBindBuffer(GL_ARRAY_BUFFER, 0));
+    GLCHK(glEnableVertexAttribArray(shader->attribute_locations[0]));
+    GLCHK(glVertexAttribPointer(shader->attribute_locations[0], 2, GL_FLOAT, GL_FALSE, 0, xys));
+    // Draw
+    GLCHK(glDrawArrays(GL_LINE_STRIP, 0, count));
+}
+
+// x,y are coordinates in [-1,1]x[-1,1] range
+void draw_square(float xmin, float xmax, float ymin, float ymax, uint32_t color) {
     // Draw a square
     GLfloat vertexBuffer[5][2];
     vertexBuffer[0][0]= xmin;
@@ -391,15 +432,8 @@ void draw_square(float xmin, float xmax, float ymin, float ymax, uint32_t color)
     vertexBuffer[3][1]= ymax;
     vertexBuffer[4][0]= xmin;
     vertexBuffer[4][1]= ymin;
-
-    // Unbind the vertex buffer --> use client memory
-    GLCHK(glBindBuffer(GL_ARRAY_BUFFER, 0));
-    GLCHK(glEnableVertexAttribArray(shader->attribute_locations[0]));
-    GLCHK(glVertexAttribPointer(shader->attribute_locations[0], 2, GL_FLOAT, GL_FALSE, 0, vertexBuffer));
-    // Draw
-    GLCHK(glDrawArrays(GL_LINE_STRIP, 0, 5));
+    draw_line_strip(vertexBuffer, 5, color);
 }
- 
 
 // If target_tex is zero, then target is the screen
 static int render_pass(SHADER_PROGRAM_T* shader, GLuint source_type, GLuint source_tex, GLuint target_tex, int targetWidth, int targetHeight) {
@@ -430,12 +464,11 @@ static int render_pass(SHADER_PROGRAM_T* shader, GLuint source_type, GLuint sour
 
 // All [-1,1]x[-1,1] coordinates
 static int historyCount = 10;
-float ballX[60], ballY[60];
+GLfloat ballXYs[60][2];
 static int ballCur = 0;
 float greenxmin, greenxmax, greenymin, greenymax;
 
-static int balltrack_readout(int width, int height)
-{
+static int balltrack_readout(int width, int height) {
     // Read texture
     // It packs two pixels into one:
     // RGBA is red,green,red,green filter values for neighbouring pixels
@@ -481,7 +514,7 @@ static int balltrack_readout(int width, int height)
                     }
                 }
             }
-	    ptr = (uint32_t*)pixelbuffer;
+            ptr = (uint32_t*)pixelbuffer;
             for (int i = 0; i < height; ++i) {
                 for (int j = 0; j < width; ++j) {
                     // R,G,B,A = FF, 00, FF, FF
@@ -494,14 +527,14 @@ static int balltrack_readout(int width, int height)
                     int y = i;
                     int x1 = 2*j;
                     int x2 = 2*j + 1;
-		    if ( y < gymin || y > gymax ) continue;
-		    if ( x1 < gxmin || x2 > gxmax ) continue;
-                    if ( R1 > 64 ) {
+                    if ( y < gymin || y > gymax ) continue;
+                    if ( x1 < gxmin || x2 > gxmax ) continue;
+                    if ( R1 >= 172 ) {
                         avgx += x1;
                         avgy += y;
                         count++;
                     }
-                    if ( R2 > 64 ) {
+                    if ( R2 >= 172 ) {
                         avgx += x2;
                         avgy += y;
                         count++;
@@ -516,8 +549,8 @@ static int balltrack_readout(int width, int height)
             if (count) {
                 avgx /= count;
                 avgy /= count;
-                ballX[ballCur] = ((float)avgx) / ((float)width) - 1.0f;
-                ballY[ballCur] = (2.0f * ((float)avgy)) / ((float)height) - 1.0f;
+                ballXYs[ballCur][0] = ((float)avgx) / ((float)width) - 1.0f;
+                ballXYs[ballCur][1] = (2.0f * ((float)avgy)) / ((float)height) - 1.0f;
                 ++ballCur;
                 if(ballCur >= historyCount)
                     ballCur = 0;
@@ -571,13 +604,15 @@ int balltrack_core_redraw(int width, int height, GLuint srctex, GLuint srctype)
 #endif
 
 #if 1
+    draw_line_strip(ballXYs, historyCount, 0xffff0000);
+
     for (int i = 0; i < historyCount; ++i) {
         int time = (ballCur - i + historyCount) % historyCount;
         int blue = 0xff - time;
         // The bytes are R,G,B,A but little-endian so 0xAABBGGRR
         int color = 0xff000000 | (blue << 16);
-	float size = 0.002f * time;
-        draw_square(ballX[i] - 0.5f * size, ballX[i] + 0.5f * size, ballY[i] - size, ballY[i] + size, color);
+        float size = 0.002f * time;
+        draw_square(ballXYs[i][0] - 0.5f * size, ballXYs[i][0] + 0.5f * size, ballXYs[i][1] - size, ballXYs[i][1] + size, color);
     }
 #endif
 

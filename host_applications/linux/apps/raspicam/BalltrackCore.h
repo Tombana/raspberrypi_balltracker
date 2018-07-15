@@ -32,7 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "BalltrackUtil.h"
 
-int balltrack_core_init(int externalSamplerExtension);
+int balltrack_core_init(int externalSamplerExtension, int flipY);
 int balltrack_core_redraw(int width, int height, GLuint srctex, GLuint srctype);
 
 #endif /* BALLTRACKCORE_H */
