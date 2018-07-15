@@ -477,8 +477,6 @@ static int balltrack_readout(int width, int height) {
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixelbuffer);
         if (glGetError() == GL_NO_ERROR) {
             // pixelbuffer[i*height + j] is i pixels from bottom and j from left
-            uint32_t avgx = 0, avgy = 0;
-            uint32_t count = 0;
             uint32_t gxmin = (uint32_t)(0.45f * 2.0f * width);
             uint32_t gxmax = (uint32_t)(0.55f * 2.0f * width);
             uint32_t gymin = (uint32_t)(0.45f * height);
@@ -515,9 +513,14 @@ static int balltrack_readout(int width, int height) {
                     }
                 }
             }
-	    gxmin -= 3;
-	    gxmax += 3;
+            gxmin -= 3;
+            gxmax += 3;
+
             ptr = (uint32_t*)pixelbuffer;
+            uint32_t maxx = 0, maxy = 0;
+            uint32_t maxR = 0;
+            uint32_t avgx = 0, avgy = 0;
+            uint32_t count = 0;
             for (int i = 0; i < height; ++i) {
                 for (int j = 0; j < width; ++j) {
                     // R,G,B,A = FF, 00, FF, FF
@@ -532,15 +535,25 @@ static int balltrack_readout(int width, int height) {
                     int x2 = 2*j + 1;
                     if ( y < gymin || y > gymax ) continue;
                     if ( x1 < gxmin || x2 > gxmax ) continue;
-                    if ( R1 >= 128 ) {
-                        avgx += x1;
-                        avgy += y;
-                        count++;
+                    if ( R1 >= 64 ) {
+                        avgx += x1 * R1;
+                        avgy += y  * R1;
+                        count += R1;
+                        if (R1 > maxR) {
+                            maxx = x1;
+                            maxy = y;
+                            maxR = R1;
+                        }
                     }
-                    if ( R2 >= 128 ) {
-                        avgx += x2;
-                        avgy += y;
-                        count++;
+                    if ( R2 >= 64 ) {
+                        avgx += x2 * R2;
+                        avgy += y  * R2;
+                        count += R2;
+                        if (R2 > maxR) {
+                            maxx = x2;
+                            maxy = y;
+                            maxR = R2;
+                        }
                     }
                 }
             }
@@ -550,7 +563,7 @@ static int balltrack_readout(int width, int height) {
             greenymin = (2.0f * gymin) / ((float)height) - 1.0f;
             greenymax = (2.0f * gymax) / ((float)height) - 1.0f;
             if (count) {
-		ballGone = 0;
+                ballGone = 0;
                 avgx /= count;
                 avgy /= count;
                 ballXYs[ballCur][0] = ((float)avgx) / ((float)width) - 1.0f;
@@ -561,18 +574,18 @@ static int balltrack_readout(int width, int height) {
                 //printf("Average x,y is (%u, %u)!", avgx, avgy);
                 return 1;
             } else {
-		if (ballGone++ == 30) {
-			printf("Ball has gone for 30 frames!\n");
-			int i = ballCur - 1;
-			if (i < 0) i = historyCount - 1;
-			if (ballXYs[i][0] < greenxmin + (greenxmax - greenxmin) / 3.0f) {
-				printf("Goal for red!\n");
-			}
-			if (ballXYs[i][0] > greenxmin + 2.0f * (greenxmax - greenxmin) / 3.0f) {
-				printf("Goal for blue!\n");
-			}
-		}	
-	    }
+                if (ballGone++ == 30) {
+                    printf("Ball has gone for 30 frames!\n");
+                    int i = ballCur - 1;
+                    if (i < 0) i = historyCount - 1;
+                    if (ballXYs[i][0] < greenxmin + (greenxmax - greenxmin) / 3.0f) {
+                        printf("Goal for red!\n");
+                    }
+                    if (ballXYs[i][0] > greenxmin + 2.0f * (greenxmax - greenxmin) / 3.0f) {
+                        printf("Goal for blue!\n");
+                    }
+                }	
+            }
         } else {
             printf("glReadPixels failed!");
         }
