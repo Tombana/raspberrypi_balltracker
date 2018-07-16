@@ -409,8 +409,8 @@ static void default_status(RASPIVID_STATE *state)
 
    // Now set anything non-zero
    state->timeout = 5000;     // 5s delay before take image
-   state->width = 1920;       // Default to 1080p
-   state->height = 1080;
+   state->width = 1280;       // Default to 720p
+   state->height = 720;
    state->encoding = MMAL_ENCODING_H264;
    state->bitrate = 17000000; // This is a decent default bitrate for 1080p
    state->framerate = VIDEO_FRAME_RATE_NUM;
