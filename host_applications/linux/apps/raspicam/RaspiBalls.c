@@ -413,7 +413,7 @@ static void default_status(RASPIVID_STATE *state)
    state->height = 720;
    state->encoding = MMAL_ENCODING_H264;
    state->bitrate = 17000000; // This is a decent default bitrate for 1080p
-   state->framerate = VIDEO_FRAME_RATE_NUM;
+   state->framerate = 60; // Default to 60 fps
    state->intraperiod = -1;    // Not set
    state->quantisationParameter = 0;
    state->demoMode = 0;
