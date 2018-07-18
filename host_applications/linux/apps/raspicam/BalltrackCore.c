@@ -405,8 +405,8 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
     GLCHK(glGenBuffers(1, &quad_vbo));
     GLCHK(glBindBuffer(GL_ARRAY_BUFFER, quad_vbo));
     GLCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(quad_varray), quad_varray, GL_STATIC_DRAW));
-    //GLCHK(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
-    GLCHK(glClearColor(0.15f, 0.25f, 0.35f, 1.0f));
+    GLCHK(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
+    //GLCHK(glClearColor(0.15f, 0.25f, 0.35f, 1.0f));
 
     GLCHK(glDisable(GL_BLEND));
     GLCHK(glDisable(GL_DEPTH_TEST));
@@ -467,13 +467,15 @@ static int render_pass(SHADER_PROGRAM_T* shader, GLuint source_type, GLuint sour
         GLCHK(glBindFramebufferOES(GL_FRAMEBUFFER_OES, fbo));
         GLCHK(glFramebufferTexture2DOES(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES, GL_TEXTURE_2D, target_tex, 0));
         GLCHK(glViewport(0, 0, targetWidth, targetHeight));
-        //glClear(GL_COLOR_BUFFER_BIT);
+        // According to the open source GL driver for the VC4 chip,
+        // [ https://github.com/anholt/mesa/wiki/VC4-Performance-Tricks ],
+        // it is faster to clear the buffer even when writing to the complete screen
+        glClear(GL_COLOR_BUFFER_BIT);
     } else {
         // Unset frame buffer object. Now draw to screen
         GLCHK(glBindFramebufferOES(GL_FRAMEBUFFER_OES, 0));
         GLCHK(glViewport(0, 0, targetWidth, targetHeight));
-        // Depth testing is disabled
-        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT); // See above comment
     }
     // Bind the input texture
     GLCHK(glActiveTexture(GL_TEXTURE0));
