@@ -109,12 +109,12 @@ static int height3 = 45;
 // Red player spinning:     ( 25  , 50   , 50)   :(
 //
 // For the replay video, seperating the Hue as  0.18 < neutral < 0.25 is fine.
-// For the camera, the bound has to be much lower. Like  0.06 < neutral < 0.15
+// For the camera, the bound has to be much lower. Like  0.06 < neutral < 0.14
 //
 // Field: (125-175, 15-75, 13-70)
 // Rescaling table
-// Hue [0-360] : 6    8     11    14    15    16    17    18
-// Hue [0-6]   : 0.10 0.133 0.183 0.233 0.250 0.267 0.283 0.30
+// Hue [0-360] : 4     6    7     8     9     10    11    12   14    15    16    17    18
+// Hue [0-6]   : 0.067 0.10 0.117 0.133 0.150 0.167 0.183 0.20 0.233 0.250 0.267 0.283 0.30
 char BALLTRACK_FSHADER_SOURCE_1[] =  \
     "#extension GL_OES_EGL_image_external : require\n" \
     "\n" \
@@ -132,9 +132,9 @@ char BALLTRACK_FSHADER_SOURCE_1[] =  \
     "        if (sat > 0.30 && value > 0.30 && value < 0.99 ) {\n" \
     "            float hue = (col.g - col.b) / chroma;\n" \
     "            // Hue upper bound of 1.0 is automatic.\n" \
-    "            if (hue > 0.24) {\n" \
+    "            if (hue > 0.14) {\n" \
     "                redfilter = 1.0;\n" \
-    "            } else if (hue < 0.14) {\n" \
+    "            } else if (hue < 0.06) {\n" \
     "                redfilter = 0.0;\n" \
     "            }\n" \
     "        }\n" \
@@ -368,7 +368,8 @@ char BALLTRACK_FSHADER_SOURCE_FIXEDCOLOR[] =  \
 
 // Plain copy of the input
 char BALLTRACK_FSHADER_SOURCE_PLAIN[] =  \
-    "uniform sampler2D tex;\n" \
+    "#extension GL_OES_EGL_image_external : require\n" \
+    "uniform samplerExternalOES tex;\n" \
     "varying vec2 texcoord;\n" \
     "void main(void) {\n" \
     "    vec4 col = texture2D(tex, texcoord);\n" \
@@ -501,6 +502,9 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
             memcpy(pos, "sampler2D         ", 18);
         }
         if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_DISPLAY, "samplerExternalOES"))){
+            memcpy(pos, "sampler2D         ", 18);
+        }
+        if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_PLAIN, "samplerExternalOES"))){
             memcpy(pos, "sampler2D         ", 18);
         }
     }
