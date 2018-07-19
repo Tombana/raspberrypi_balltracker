@@ -455,6 +455,12 @@ static void default_status(RASPIVID_STATE *state)
 
    // Set initial GL preview state
    raspitex_set_defaults(&state->raspitex_state);
+
+   // 720p aspect ratio
+   state->preview_parameters.previewWindow.width = 640;
+   state->preview_parameters.previewWindow.height = 360;
+   state->raspitex_state.width = 640;
+   state->raspitex_state.height = 360;
 }
 
 

@@ -30,6 +30,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "BalltrackCore.h"
 #include <string.h>
 
+// For writing to the FIFO python thing
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 // Divisions by 2 of 720p with correct aspect ratio
 // 1280,720
 //  640,360
@@ -37,19 +42,24 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //  160, 90
 //   80, 45
 
-// -- Source (1080p or 720p)
+// Every step maintains 720p aspect ratio
+// -- Source is 720p
 static int width0  = 1280;
 static int height0 = 720;
-// -- From source to phase 1: (maintain 720p aspect ratio)
+// -- From source to phase 1: 2x2 sampler-average, then hue filter
 // -- 2x2 pixels to 1 pixel
 static int width1  = 640 / 2; // RGBA packs two pairs
 static int height1 = 360;
-// -- From phase 1 to phase 2: (maintain 720p aspect ratio)
-// -- 8x8 pixels to 1 pixel
-static int width2  = 80 / 2; // RGBA packs to pairs
-static int height2 = 45;
-// -- From phase 2 to screen
-// state->width,state->height
+// -- From phase 1 to phase 2: dilate 'red' filter, do not erode 'orange filter' but rescale?
+// -- 4x4 pixels to 1 pixel (but sample 12x12 pixels to 1 pixel)
+static int width2  = 160 / 2; // RGBA packs to pairs
+static int height2 = 90;
+// -- From phase 2 to phase 3: average for easier cpu handling ???
+// -- 2x2 pixels to 1 pixel
+static int width3  = 80 / 2; // RGBA packs to pairs
+static int height3 = 45;
+// -- From phase 3 to screen
+// screenwidth,screenheight
 
 
 #define BALLTRACK_VSHADER_SOURCE \
@@ -88,6 +98,7 @@ static int height2 = 45;
 // Ball sat lower bound is important to distinguish it from pure white
 //
 // These (Hue,Saturation,Value) tuples are all in range [0-360]x[0,100]x[0,100]
+// This is all from video. Not always the same as from camera.
 // Normal ball:             (16-20, 50-70, 70-80)
 // Fast blur ball in light: (?-60 , 15+  , 50+)
 // Ball in goal:            (17-30, 60-80, 30-50)
@@ -97,7 +108,10 @@ static int height2 = 45;
 //                          (47   , 42   , 31)
 // Red player spinning:     ( 25  , 50   , 50)   :(
 //
-// Field: (125-175, ?, ?)
+// For the video, seperating the Hue at 15 (0.25) is fine.
+// For the camera, the bound has to be much lower
+//
+// Field: (125-175, 15-75, 13-70)
 // Rescaling table
 // Hue [0-360] : 11    14    15     16    17    18
 // Hue [0-6]   : 0.183 0.233 0.250  0.267 0.283 0.30
@@ -112,21 +126,21 @@ char BALLTRACK_FSHADER_SOURCE_1[] =  \
     "    float value = max(col.r, max(col.g, col.b));\n" \
     "    float chroma= value - min(col.r, min(col.g, col.b));\n" \
     "    float sat = (value > 0.0 ? (chroma / value) : 0.0); \n" \
-    "    float redfilter = 0.5;\n" \
+    "    float redfilter = 0.8;\n" \
     "    float greenfilter = 0.0;\n" \
     "    if (col.r == value) {\n" \
-    "        if (sat > 0.25 && value > 0.15 && value < 0.90 ) {\n" \
+    "        if (sat > 0.30 && value > 0.30 && value < 0.90 ) {\n" \
     "            float hue = (col.g - col.b) / chroma;\n" \
     "            // Hue upper bound of 1.0 is automatic.\n" \
-    "            if (hue > 0.26) {\n" \
+    "            if (hue > 0.15) {\n" \
     "                redfilter = 1.0;\n" \
-    "            } else if (hue < 0.23) {\n" \
+    "            } else if (hue < 0.06) {\n" \
     "                redfilter = 0.0;\n" \
     "            }\n" \
     "        }\n" \
     "    } else if (col.g == value) {\n" \
     "        float hue = (col.b - col.r) / chroma;\n" \
-    "        if (hue > 0.0 && hue < 0.6 && sat > 0.15 && sat < 0.75 && value > 0.15 && value < 0.75 ) {\n" \
+    "        if (hue > 0.0 && hue < 0.9 && sat > 0.15 && value > 0.15 && value < 0.75 ) {\n" \
     "           greenfilter = 1.0;\n" \
     "        }\n" \
     "    }\n" \
@@ -198,8 +212,106 @@ char BALLTRACK_FSHADER_SOURCE_2[] =  \
     "    gl_FragColor.ba = (1.0/36.0) * (avg2.rg + avg2.ba);\n" \
     "}\n";
 
-// Balltrack shader third phase
-char BALLTRACK_FSHADER_SOURCE_3[] =  \
+// Balltrack shader new second phase
+// Ouput is 4X smaller in both directions
+// We will use GL_LINEAR so that the GPU samples 4 texels at once.
+// The center of the output pixel (=texcoord) is at the intersection
+// of four input pixels.
+// tex_unit is size of input texel
+// In the height dimension, where we have one output:
+// tex_unit:-8 -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7  8
+// Input:    |--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|
+// texcoord:                   |-----*-----|
+// samples:        |--*--|--*--|--*--|--*--|--*--|--*--|
+//
+// unused:
+// samples:                 |--*--|--*--|--*--|
+// samples:              |--*--|--*--|--*--|--*--|
+// samples:           |--*--|--*--|--*--|--*--|--*--|
+//
+// In the width dimension, where we have two *outputs*:
+// tex_unit:-6    -5    -4    -3    -2    -1     0     1     2     3     4     5     6
+// Input:    |RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|
+// texcoord:                         |----R-G----*----B-A----|
+// Output:               |<--             R G             -->|
+// Output:                           |<--             B A             -->|
+// samples:              |-----*-----|-----*-----|-----*-----|-----*-----|
+// 
+// unused
+// samples:                          |-----*-----|-----*-----|
+// samples:                    |-----*-----|-----*-----|-----*-----|
+// samples:        |-----*-----|-----*-----|-----*-----|-----*-----|-----*-----|
+char BALLTRACK_FSHADER_SOURCE_2_NEW[] =  \
+    "uniform sampler2D tex;\n" \
+    "varying vec2 texcoord;\n" \
+    "uniform vec2 tex_unit;\n" \
+    "void main(void) {\n" \
+    "    bool foundRed = false;\n" \
+    "    vec4 avg1 = vec4(0,0,0,0);\n" \
+    "    vec4 avg2 = vec4(0,0,0,0);\n" \
+    "    for (int i = -3; i <= 3; i += 2) {\n" \
+    "    for (int j = -5; j <= 5; j += 2) {\n" \
+    "       vec4 col = texture2D(tex, texcoord + vec2(i,j) * tex_unit);\n" \
+    "       if (min(col.r,col.b) < 0.78) {\n" \
+    "           foundRed = true;\n" \
+    "       }\n" \
+    "       // I *really* hope it unrolls this loop\n" \
+    "       if (j == -1 || j == 1) {\n" \
+    "           if (i == -1) {\n" \
+    "               avg1 += col;\n" \
+    "           } else if (i == 1) {\n" \
+    "               avg2 += col;\n" \
+    "           }\n" \
+    "       }\n" \
+    "    }\n" \
+    "    }\n" \
+    "    //gl_FragColor.rg = (1.0/4.0) * (avg1.rg + avg1.ba);\n" \
+    "    //gl_FragColor.ba = (1.0/4.0) * (avg2.rg + avg2.ba);\n" \
+    "    gl_FragColor.g = (1.0/4.0) * (avg1.g + avg1.a);\n" \
+    "    gl_FragColor.a = (1.0/4.0) * (avg2.g + avg2.a);\n" \
+    "    if (foundRed) {\n" \
+    "        gl_FragColor.r = 0.0;\n" \
+    "        gl_FragColor.b = 0.0;\n" \
+    "    } else {\n" \
+    "        // Scale [0.8,1] to [0.5,1]\n" \
+    "        // 2.0 * r - 1.0 \n" \
+    "        // where r = (avg.r + avg.b) / 4.0 \n" \
+    "        gl_FragColor.r = (2.0/4.0) * (avg1.r + avg1.b) - 1.0;\n" \
+    "        gl_FragColor.b = (2.0/4.0) * (avg2.r + avg2.b) - 1.0;\n" \
+    "    }\n" \
+    "}\n";
+
+// Balltrack shader new third phase
+// Ouput is 2X smaller in both directions
+// In the height dimension, where we have one output:
+// tex_unit:-8 -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7  8
+// Input:    |--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|
+// texcoord:                      |--*--|
+// samples:                       |--*--|
+//
+// In the width dimension, where we have two *outputs*:
+// tex_unit:-6    -5    -4    -3    -2    -1     0     1     2     3     4     5     6
+// Input:    |RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|RG|BA|
+// texcoord:                               |-R-G-*-B-A-|
+// Output:                                 |<R G>|
+// Output:                                       |<B A>|
+// samples:                                |--*--|--*--|  do not use GL_LINEAR ??
+char BALLTRACK_FSHADER_SOURCE_3_NEW[] =  \
+    "uniform sampler2D tex;\n" \
+    "varying vec2 texcoord;\n" \
+    "uniform vec2 tex_unit;\n" \
+    "void main(void) {\n" \
+    "    vec4 col1 = texture2D(tex, texcoord - vec2(0.5,0) * tex_unit );\n" \
+    "    vec4 col2 = texture2D(tex, texcoord + vec2(0.5,0) * tex_unit );\n" \
+    "    gl_FragColor.rg = 0.5 * (col1.rg + col1.ba);\n" \
+    "    gl_FragColor.ba = 0.5 * (col2.rg + col2.ba);\n" \
+    "}\n";
+
+
+#define DEBUG 1
+
+// Balltrack shader display phase
+char BALLTRACK_FSHADER_SOURCE_DISPLAY[] =  \
     "#extension GL_OES_EGL_image_external : require\n" \
     "uniform samplerExternalOES tex_camera;\n" \
     "uniform vec2 tex_unit;\n" \
@@ -227,7 +339,7 @@ char BALLTRACK_FSHADER_SOURCE_3[] =  \
     "    } else {\n" \
     "        gl_FragColor = col;\n" \
     "    }\n" \
-    "    //gl_FragColor = 0.2 * col + 0.8 * vec4(r,r,r,1.0);\n" \
+    "    gl_FragColor = 0.2 * col + 0.8 * vec4(r,r,r,1.0);\n" \
     "}\n";
 
 
@@ -249,8 +361,12 @@ static GLuint quad_vbo; // vertex buffer object
 static GLuint fbo;      // frame buffer object for render-to-texture
 static GLuint rtt_tex1; // Texture for render-to-texture
 static GLuint rtt_tex2; // Texture for render-to-texture
+static GLuint rtt_tex3; // Texture for render-to-texture
 
 static uint8_t* pixelbuffer; // For reading out result
+
+int timeseriesfile;
+
 
 static SHADER_PROGRAM_T balltrack_shader_1 =
 {
@@ -263,7 +379,7 @@ static SHADER_PROGRAM_T balltrack_shader_1 =
 static SHADER_PROGRAM_T balltrack_shader_2 =
 {
     .vertex_source = BALLTRACK_VSHADER_SOURCE,
-    .fragment_source = BALLTRACK_FSHADER_SOURCE_2,
+    .fragment_source = BALLTRACK_FSHADER_SOURCE_2_NEW,
     .uniform_names = {"tex", "tex_unit"},
     .attribute_names = {"vertex"},
 };
@@ -271,7 +387,15 @@ static SHADER_PROGRAM_T balltrack_shader_2 =
 static SHADER_PROGRAM_T balltrack_shader_3 =
 {
     .vertex_source = BALLTRACK_VSHADER_SOURCE,
-    .fragment_source = BALLTRACK_FSHADER_SOURCE_3,
+    .fragment_source = BALLTRACK_FSHADER_SOURCE_3_NEW,
+    .uniform_names = {"tex", "tex_unit"},
+    .attribute_names = {"vertex"},
+};
+
+static SHADER_PROGRAM_T balltrack_shader_display =
+{
+    .vertex_source = BALLTRACK_VSHADER_SOURCE,
+    .fragment_source = BALLTRACK_FSHADER_SOURCE_DISPLAY,
     .uniform_names = {"tex_camera", "tex_unit", "tex_filter"},
     .attribute_names = {"vertex"},
 };
@@ -331,6 +455,9 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
 {
     int rc = 0;
 
+    const char* glRenderer = (const char*)glGetString(GL_RENDERER);
+    printf("OpenGL renderer string: %s\n", glRenderer);
+
     if (externalSamplerExtension == 0) {
         // Replace
         // "samplerExternalOES"
@@ -339,7 +466,7 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
         if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_1, "samplerExternalOES"))){
             memcpy(pos, "sampler2D         ", 18);
         }
-        if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_3, "samplerExternalOES"))){
+        if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_DISPLAY, "samplerExternalOES"))){
             memcpy(pos, "sampler2D         ", 18);
         }
     }
@@ -354,7 +481,7 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
         //balltrack_shader_3.vertex_source = BALLTRACK_VSHADER_YFLIP_SOURCE;
     }
 
-    printf("Building shader 1\n");
+    printf("Building shader `phase 1`\n");
     rc = balltrack_build_shader_program(&balltrack_shader_1);
     if (rc != 0)
         goto end;
@@ -362,7 +489,7 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
     if (rc != 0)
         goto end;
 
-    printf("Building shader 2\n");
+    printf("Building shader `phase 2`\n");
     rc = balltrack_build_shader_program(&balltrack_shader_2);
     if (rc != 0)
         goto end;
@@ -370,21 +497,35 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
     if (rc != 0)
         goto end;
 
-    printf("Building shader 3\n");
+    printf("Building shader `phase 3`\n");
     rc = balltrack_build_shader_program(&balltrack_shader_3);
     if (rc != 0)
         goto end;
-    rc = shader_set_uniforms(&balltrack_shader_3, width2, height2, 1, 1);
+    rc = shader_set_uniforms(&balltrack_shader_3, width2, height2, 1, 0);
     if (rc != 0)
         goto end;
 
-    printf("Building shader 4\n");
+    printf("Building shader `display`\n");
+    rc = balltrack_build_shader_program(&balltrack_shader_display);
+    if (rc != 0)
+        goto end;
+#if DEBUG == 1
+    rc = shader_set_uniforms(&balltrack_shader_display, width1, height1, 1, 1);
+#elif DEBUG == 2
+    rc = shader_set_uniforms(&balltrack_shader_display, width2, height2, 1, 1);
+#else
+    rc = shader_set_uniforms(&balltrack_shader_display, width3, height3, 1, 1);
+#endif
+    if (rc != 0)
+        goto end;
+
+    printf("Building shader `plain`\n");
     rc = balltrack_build_shader_program(&balltrack_shader_plain);
     if (rc != 0)
         goto end;
 
     // Buffer to read out pixels from last texture
-    uint32_t buffer_size = width2 * height2 * 4;
+    uint32_t buffer_size = width3 * height3 * 4;
     pixelbuffer = calloc(buffer_size, 1);
     if (!pixelbuffer) {
         rc = -1;
@@ -399,17 +540,22 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
 
     printf("Creating render-to-texture targets\n");
     rtt_tex1 = createFilterTexture(width1, height1, GL_LINEAR);
-    rtt_tex2 = createFilterTexture(width2, height2, GL_NEAREST);
+    rtt_tex2 = createFilterTexture(width2, height2, GL_LINEAR);
+    rtt_tex3 = createFilterTexture(width3, height3, GL_NEAREST);
 
     printf("Creating vertex-buffer object\n");
     GLCHK(glGenBuffers(1, &quad_vbo));
     GLCHK(glBindBuffer(GL_ARRAY_BUFFER, quad_vbo));
     GLCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(quad_varray), quad_varray, GL_STATIC_DRAW));
     GLCHK(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
-    //GLCHK(glClearColor(0.15f, 0.25f, 0.35f, 1.0f));
 
     GLCHK(glDisable(GL_BLEND));
     GLCHK(glDisable(GL_DEPTH_TEST));
+
+    timeseriesfile = open("/tmp/timeseries.txt", O_WRONLY);
+    if (!timeseriesfile) {
+        printf("Unable to open /tmp/timeseries.txt\n");
+    }
 end:
     return rc;
 }
@@ -492,11 +638,14 @@ static int render_pass(SHADER_PROGRAM_T* shader, GLuint source_type, GLuint sour
 // All [-1,1]x[-1,1] coordinates
 static int historyCount = 120;
 GLPOINT ballXYs[120];
+int ballTimes[120];
+static int frameNumber = 0;
 static int ballCur = 0;
 float greenxmin, greenxmax, greenymin, greenymax;
 static int ballGone = 0;
 
 static int balltrack_readout(int width, int height) {
+    frameNumber++;
     // Read texture
     // It packs two pixels into one:
     // RGBA is red,green,red,green filter values for neighbouring pixels
@@ -504,10 +653,10 @@ static int balltrack_readout(int width, int height) {
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixelbuffer);
         if (glGetError() == GL_NO_ERROR) {
             // pixelbuffer[i*height + j] is i pixels from bottom and j from left
-            uint32_t gxmin = (uint32_t)(0.45f * 2.0f * width);
-            uint32_t gxmax = (uint32_t)(0.55f * 2.0f * width);
-            uint32_t gymin = (uint32_t)(0.45f * height);
-            uint32_t gymax = (uint32_t)(0.55f * height);
+            int gxmin = (int)(0.45f * 2.0f * width);
+            int gxmax = (int)(0.55f * 2.0f * width);
+            int gymin = (int)(0.45f * height);
+            int gymax = (int)(0.55f * height);
 
             uint32_t* ptr = (uint32_t*)pixelbuffer;
             for (int i = 0; i < height; ++i) {
@@ -544,6 +693,10 @@ static int balltrack_readout(int width, int height) {
             gxmax += 3;
             gymin -= 3;
             gymax += 3;
+            if (gxmin < 0) gxmin = 0;
+            if (gymin < 0) gymin = 0;
+            if (gxmax > 2*width-1) gxmax = 2*width - 1;
+            if (gymax > height) gymax = height;
 
             // Find the max orange intensity
             uint32_t maxx = 0, maxy = 0;
@@ -584,11 +737,19 @@ static int balltrack_readout(int width, int height) {
             if (searchImax > height) searchImax = height;
             if (searchJmax > width ) searchJmax = width;
 
+            int threshold1 = 128 + 90;
+            int threshold2 = 128 + 40;
+            if (maxx < gxmin + 8 || maxx > gxmax - 8) {
+                threshold1 = 128 + 30;
+                threshold2 = 128 + 15;
+            }
+
+
             uint32_t avgx = 0, avgy = 0;
             uint32_t weight = 0;
             uint32_t sumR = 0;
             uint32_t count = 0;
-            if (maxR > 128 + 80) {
+            if (maxR > threshold1) {
                 ptr = (uint32_t*)pixelbuffer;
                 for (int i = searchImin; i < searchImax; ++i) {
                     for (int j = searchJmin; j < searchJmax; ++j) {
@@ -623,7 +784,7 @@ static int balltrack_readout(int width, int height) {
             greenxmax = gxmax / ((float)width) - 1.0f;
             greenymin = (2.0f * gymin) / ((float)height) - 1.0f;
             greenymax = (2.0f * gymax) / ((float)height) - 1.0f;
-            if (weight > 0 && sumR > (128 + 40) * count ) {
+            if (weight > 0 && sumR > threshold2 * count ) {
                 ballGone = 0;
                 // avgx, avgy are the bottom-left corner of the macropixels
                 // Shift them by half a pixel to fix
@@ -632,9 +793,19 @@ static int balltrack_readout(int width, int height) {
                 float y = 0.5f + (((float)avgy) / ((float)weight));
                 ballXYs[ballCur].x = x / ((float)width) - 1.0f;
                 ballXYs[ballCur].y = (2.0f * y) / ((float)height) - 1.0f;
+                ballTimes[ballCur] = frameNumber;
                 ++ballCur;
-                if(ballCur >= historyCount)
+                if(ballCur >= historyCount) {
                     ballCur = 0;
+
+                    if (timeseriesfile) {
+                        char buffer[128];
+                        for (int i = 0; i < historyCount; ++i) {
+                            int len = sprintf(buffer, "{%d, %f, %f},\n", ballTimes[i], ballXYs[i].x, ballXYs[i].y);
+                            write(timeseriesfile, buffer, len);
+                        }
+                    }
+                }
                 //printf("Average x,y is (%u, %u)!", avgx, avgy);
                 return 1;
             } else {
@@ -642,11 +813,21 @@ static int balltrack_readout(int width, int height) {
                     printf("Ball has gone for 60 frames!\n");
                     int i = ballCur - 1;
                     if (i < 0) i = historyCount - 1;
+                    int goal = 0;
                     if (ballXYs[i].x < greenxmin + (greenxmax - greenxmin) / 4.0f) {
                         printf("Goal for red!\n");
+                        goal = 1;
                     }
                     if (ballXYs[i].y > greenxmin + 3.0f * (greenxmax - greenxmin) / 4.0f) {
                         printf("Goal for blue!\n");
+                        goal = 2;
+                    }
+                    if (goal != 0) {
+                        //int fd = open("/tmp/foos-debug.in", O_WRONLY);
+                        //if (fd > 0) {
+                        //    write(fd, (goal == 1 ? "BG\n" : "YG\n"), 4);
+                        //    close(fd);
+                        //}
                     }
                 }	
             }
@@ -664,22 +845,23 @@ int balltrack_core_redraw(int width, int height, GLuint srctex, GLuint srctype)
     // The source image might be much larger
 
     // First pass: hue filter into smaller texture
-    render_pass(&balltrack_shader_1, srctype, srctex, rtt_tex1, width1, height1);
-    // Second pass: downsample
+    render_pass(&balltrack_shader_1, srctype,       srctex,   rtt_tex1, width1, height1);
+    // Second pass: dilate red players
     render_pass(&balltrack_shader_2, GL_TEXTURE_2D, rtt_tex1, rtt_tex2, width2, height2);
+    // Third pass: downsample
+    render_pass(&balltrack_shader_3, GL_TEXTURE_2D, rtt_tex2, rtt_tex3, width3, height3);
     // Readout result
-    balltrack_readout(width2, height2);
+    balltrack_readout(width3, height3);
     // Third pass: render to screen
-//#define DEBUG 1
-#if DEBUG
     GLCHK(glActiveTexture(GL_TEXTURE1));
+#if DEBUG == 1
     GLCHK(glBindTexture(GL_TEXTURE_2D, rtt_tex1));
-    render_pass(&balltrack_shader_3, srctype, srctex, 0, width, height);
-#else
-    GLCHK(glActiveTexture(GL_TEXTURE1));
+#elif DEBUG == 2
     GLCHK(glBindTexture(GL_TEXTURE_2D, rtt_tex2));
-    render_pass(&balltrack_shader_3, srctype, srctex, 0, width, height);
+#else
+    GLCHK(glBindTexture(GL_TEXTURE_2D, rtt_tex3));
 #endif
+    render_pass(&balltrack_shader_display, srctype, srctex, 0, width, height);
 
 #if 1
     // Draw green bounding box
