@@ -51,7 +51,8 @@ typedef struct SHADER_PROGRAM_T
 } SHADER_PROGRAM_T;
 
 
-
 int balltrack_build_shader_program(SHADER_PROGRAM_T *p);
+
+int dump_frame(int width, int height, const char* filename);
 
 #endif /* BALLTRACKUTIL_H */

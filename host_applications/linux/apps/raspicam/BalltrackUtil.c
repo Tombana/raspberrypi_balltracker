@@ -1,5 +1,7 @@
 // Mostly taken from RaspiTexUtil
 #include "BalltrackUtil.h"
+#include "tga.h"
+#include <stdio.h>
 
 /**
  * Takes a description of shader program, compiles it and gets the locations
@@ -98,3 +100,44 @@ fail:
     }
     return -1;
 }
+
+static void brga_to_rgba(uint8_t *buffer, size_t size)
+{
+   uint8_t* out = buffer;
+   uint8_t* end = buffer + size;
+
+   while (out < end)
+   {
+      uint8_t tmp = out[0];
+      out[0] = out[2];
+      out[2] = tmp;
+      out += 4;
+   }
+}
+
+int dump_frame(int width, int height, const char* filename) {
+    FILE* output_file = fopen(filename, "wb");
+    if (!output_file)
+        return 1;
+
+    uint8_t* buffer = NULL;
+    size_t size = width * height * 4;
+    buffer = calloc(size, 1);
+    if (!buffer) {
+        fclose(output_file);
+        return 1;
+    }
+
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+    if (glGetError() == GL_NO_ERROR) {
+        brga_to_rgba(buffer, size);
+        write_tga(output_file, width, height, buffer, size);
+    }
+
+    fflush(output_file);
+    fclose(output_file);
+    free(buffer);
+
+    return 0;
+}
+
