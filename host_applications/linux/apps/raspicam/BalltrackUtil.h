@@ -18,7 +18,7 @@
     X; \
    if ((err = glGetError())) \
    { \
-      printf("GL error 0x%x in " #X "file %s line %d", err, __FILE__,__LINE__); \
+      printf("GL error 0x%x in " #X "file %s line %d\n", err, __FILE__,__LINE__); \
    } \
 }
 #else

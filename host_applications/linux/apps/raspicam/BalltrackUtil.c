@@ -28,7 +28,7 @@ int balltrack_build_shader_program(SHADER_PROGRAM_T *p)
     glGetShaderiv(p->vs, GL_COMPILE_STATUS, &status);
     if (! status) {
         glGetShaderInfoLog(p->vs, sizeof(log), &logLen, log);
-        printf("Program info log %s", log);
+        printf("Program info log %s\n", log);
         goto fail;
     }
 
@@ -39,7 +39,7 @@ int balltrack_build_shader_program(SHADER_PROGRAM_T *p)
     glGetShaderiv(p->fs, GL_COMPILE_STATUS, &status);
     if (! status) {
         glGetShaderInfoLog(p->fs, sizeof(log), &logLen, log);
-        printf("Program info log %s", log);
+        printf("Program info log %s\n", log);
         goto fail;
     }
 
@@ -50,9 +50,9 @@ int balltrack_build_shader_program(SHADER_PROGRAM_T *p)
     glGetProgramiv(p->program, GL_LINK_STATUS, &status);
     if (! status)
     {
-        printf("Failed to link shader program");
+        printf("Failed to link shader program\n");
         glGetProgramInfoLog(p->program, sizeof(log), &logLen, log);
-        printf("Program info log %s", log);
+        printf("Program info log %s\n", log);
         goto fail;
     }
 
@@ -63,7 +63,7 @@ int balltrack_build_shader_program(SHADER_PROGRAM_T *p)
         p->attribute_locations[i] = glGetAttribLocation(p->program, p->attribute_names[i]);
         if (p->attribute_locations[i] == -1)
         {
-            printf("Failed to get location for attribute %s",
+            printf("Failed to get location for attribute %s\n",
                   p->attribute_names[i]);
             goto fail;
         }
@@ -79,7 +79,7 @@ int balltrack_build_shader_program(SHADER_PROGRAM_T *p)
         p->uniform_locations[i] = glGetUniformLocation(p->program, p->uniform_names[i]);
         if (p->uniform_locations[i] == -1)
         {
-            printf("Failed to get location for uniform %s",
+            printf("Failed to get location for uniform %s\n",
                   p->uniform_names[i]);
             goto fail;
         }
@@ -91,7 +91,7 @@ int balltrack_build_shader_program(SHADER_PROGRAM_T *p)
     return 0;
 
 fail:
-    printf("Failed to build shader program");
+    printf("Failed to build shader program\n");
     if (p)
     {
         glDeleteProgram(p->program);

@@ -369,11 +369,25 @@ char BALLTRACK_FSHADER_SOURCE_FIXEDCOLOR[] =  \
 // Plain copy of the input
 char BALLTRACK_FSHADER_SOURCE_PLAIN[] =  \
     "#extension GL_OES_EGL_image_external : require\n" \
-    "uniform samplerExternalOES tex;\n" \
+    "uniform samplerExternalOES tex_rgb;\n" \
+    "uniform samplerExternalOES tex_y;\n" \
+    "uniform samplerExternalOES tex_u;\n" \
+    "uniform samplerExternalOES tex_v;\n" \
     "varying vec2 texcoord;\n" \
     "void main(void) {\n" \
-    "    vec4 col = texture2D(tex, texcoord);\n" \
-    "    gl_FragColor = col;\n" \
+    "    vec4 col   = texture2D(tex_rgb, texcoord);\n" \
+    "    vec4 col_y = texture2D(tex_y, texcoord);\n" \
+    "    vec4 col_u = texture2D(tex_u, texcoord);\n" \
+    "    vec4 col_v = texture2D(tex_v, texcoord);\n" \
+    "    float Y = col_y.r;\n" \
+    "    float U = col_u.r;\n" \
+    "    float V = col_v.r;\n" \
+    "    float B = clamp(1.164 * (Y - 0.0625) + 2.018 * (U - 0.5)  , 0.0,1.0);\n" \
+    "    float G = clamp(1.164 * (Y - 0.0625) - 0.813 * (V - 0.5) - 0.391 * (U - 0.5) , 0.0,1.0);\n" \
+    "    float R = clamp(1.164 * (Y - 0.0625) + 1.596 * (V - 0.5)  , 0.0,1.0);\n" \
+    "    //gl_FragColor = vec4(abs(R - col.r), abs(G - col.g), abs(B - col.b), 1.0);\n" \
+    "    gl_FragColor = vec4(R, G, B, 1.0);\n" \
+    "    //gl_FragColor = col;\n" \
     "}\n";
 
 
@@ -438,7 +452,7 @@ static SHADER_PROGRAM_T balltrack_shader_plain =
 {
     .vertex_source = BALLTRACK_VSHADER_SOURCE,
     .fragment_source = BALLTRACK_FSHADER_SOURCE_PLAIN,
-    .uniform_names = {"tex"},
+    .uniform_names = {"tex_rgb", "tex_y", "tex_u", "tex_v"},
     .attribute_names = {"vertex"},
 };
 
@@ -569,6 +583,9 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
     rc = shader_set_uniforms(&balltrack_shader_plain, width0, height0, 0, 0);
     if (rc != 0)
         goto end;
+    GLCHK(glUniform1i(balltrack_shader_plain.uniform_locations[1], 2)); // Texture unit
+    GLCHK(glUniform1i(balltrack_shader_plain.uniform_locations[2], 3)); // Texture unit
+    GLCHK(glUniform1i(balltrack_shader_plain.uniform_locations[3], 4)); // Texture unit
 
     // Buffer to read out pixels from last texture
     uint32_t buffer_size = width3 * height3 * 4;
