@@ -21,8 +21,13 @@ set (COMMON_SOURCES
    RaspiCLI.c
    RaspiPreview.c)
 
+add_custom_command(OUTPUT balltrackshaders/allshaders.h
+                   COMMAND make allshaders.h
+                   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/balltrackshaders
+)
+
 add_executable(raspistill ${COMMON_SOURCES} RaspiStill.c  RaspiTex.c RaspiTexUtil.c tga.c ${GL_SCENE_SOURCES})
-add_executable(raspiballs ${COMMON_SOURCES} RaspiBalls.c  RaspiTex.c RaspiTexUtil.c tga.c ${GL_SCENE_SOURCES} gl_scenes/balltrack.c BalltrackCore.c BalltrackUtil.c)
+add_executable(raspiballs ${COMMON_SOURCES} RaspiBalls.c  RaspiTex.c RaspiTexUtil.c tga.c ${GL_SCENE_SOURCES} gl_scenes/balltrack.c balltrackshaders/allshaders.h BalltrackCore.c BalltrackUtil.c)
 add_executable(raspiyuv   ${COMMON_SOURCES} RaspiStillYUV.c)
 add_executable(raspivid   ${COMMON_SOURCES} RaspiVid.c)
 add_executable(raspividyuv  ${COMMON_SOURCES} RaspiVidYUV.c)
