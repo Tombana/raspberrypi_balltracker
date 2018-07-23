@@ -175,13 +175,13 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
         // "samplerExternalOES"
         // "sampler2D         "
         char* pos = 0;
-        if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_1, "samplerExternalOES"))){
+        if ((pos = strstr(balltrack_shader_1.fragment_source, "samplerExternalOES"))){
             memcpy(pos, "sampler2D         ", 18);
         }
-        if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_DISPLAY, "samplerExternalOES"))){
+        if ((pos = strstr(balltrack_shader_display.fragment_source, "samplerExternalOES"))){
             memcpy(pos, "sampler2D         ", 18);
         }
-        if ((pos = strstr(BALLTRACK_FSHADER_SOURCE_PLAIN, "samplerExternalOES"))){
+        if ((pos = strstr(balltrack_shader_plain.fragment_source, "samplerExternalOES"))){
             memcpy(pos, "sampler2D         ", 18);
         }
     }
