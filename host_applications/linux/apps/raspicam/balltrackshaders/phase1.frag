@@ -30,10 +30,12 @@
 // For the replay video, seperating the Hue as  0.18 < neutral < 0.25 is fine.
 // For the camera, the bound has to be much lower. Like  0.06 < neutral < 0.14
 //
+// Yellow ball from video: (45-60, 50-70, 50-80)
+//
 // Field: (125-175, 15-75, 13-70)
 // Rescaling table
-// Hue [0-360] : 4     6    7     8     9     10    11    12   14    15    16    17    18
-// Hue [0-6]   : 0.067 0.10 0.117 0.133 0.150 0.167 0.183 0.20 0.233 0.250 0.267 0.283 0.30
+// Hue [0-360] : 4     6    7     8     9     10    11    12   14    15    16    17    18   45
+// Hue [0-6]   : 0.067 0.10 0.117 0.133 0.150 0.167 0.183 0.20 0.233 0.250 0.267 0.283 0.30 0.75
 #extension GL_OES_EGL_image_external : require
 
 vec2 getFilter(vec4 col) {
@@ -47,12 +49,12 @@ vec2 getFilter(vec4 col) {
     float redfilter = 0.8;
     float greenfilter = 0.0;
     if (col.r == value) {
-        if (sat > 0.30 && value > 0.30 && value < 0.99 ) {
+        if (sat > 0.40 && value > 0.40 && value < 0.99 ) {
             float hue = (col.g - col.b) / chroma;
             // Hue upper bound of 1.0 is automatic.
-            if (hue > 0.14) {
+            if (hue > 0.60) {
                 redfilter = 1.0;
-            } else if (hue < 0.06) {
+            } else if (hue < 0.04) {
                 redfilter = 0.0;
             }
         }

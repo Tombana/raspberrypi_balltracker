@@ -17,23 +17,23 @@ uniform sampler2D tex;
 varying vec2 texcoord;
 uniform vec2 tex_unit;
 void main(void) {
-    bool foundRed = false;
-    for (int i = -2; i <= 2; i += 2) {
-       vec4 col = texture2D(tex, texcoord + vec2(i,0) * tex_unit);
-       if (min(col.r,col.b) < 0.78) {
-           foundRed = true;
-       }
-    }
+    //bool foundRed = false;
+    //for (int i = -2; i <= 2; i += 2) {
+    //   vec4 col = texture2D(tex, texcoord + vec2(i,0) * tex_unit);
+    //   if (min(col.r,col.b) < 0.78) {
+    //       foundRed = true;
+    //   }
+    //}
     vec4 col1 = texture2D(tex, texcoord - vec2(0.5,0) * tex_unit );
     vec4 col2 = texture2D(tex, texcoord + vec2(0.5,0) * tex_unit );
     gl_FragColor.rg = 0.5 * (col1.rg + col1.ba);
     gl_FragColor.ba = 0.5 * (col2.rg + col2.ba);
-    if (foundRed) {
-        gl_FragColor.r = 0.0;
-        gl_FragColor.b = 0.0;
-    } else {
-        // Rescale from [0.8,1] to [0,1] 
-        gl_FragColor.r = 5.0 * gl_FragColor.r - 4.0;
-        gl_FragColor.b = 5.0 * gl_FragColor.b - 4.0;
-    }
+    //if (foundRed) {
+    //    gl_FragColor.r = 0.0;
+    //    gl_FragColor.b = 0.0;
+    //} else {
+    //    // Rescale from [0.8,1] to [0,1] 
+    //    gl_FragColor.r = 5.0 * gl_FragColor.r - 4.0;
+    //    gl_FragColor.b = 5.0 * gl_FragColor.b - 4.0;
+    //}
 }
