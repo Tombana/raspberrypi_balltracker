@@ -31,6 +31,8 @@
 // For the camera, the bound has to be much lower. Like  0.06 < neutral < 0.14
 //
 // Yellow ball from video: (45-60, 50-70, 50-80)
+// Yellow ball from framedump: (50,53,84)
+// Yellow ball from framedump near dark goal: (48-53, 50-65, 22-37)
 //
 // Field: (125-175, 15-75, 13-70)
 // Rescaling table
@@ -49,7 +51,7 @@ vec2 getFilter(vec4 col) {
     float redfilter = 0.8;
     float greenfilter = 0.0;
     if (col.r == value) {
-        if (sat > 0.40 && value > 0.40 && value < 0.99 ) {
+        if (sat > 0.40 && value > 0.15 && value < 0.95 ) {
             float hue = (col.g - col.b) / chroma;
             // Hue upper bound of 1.0 is automatic.
             if (hue > 0.60) {
