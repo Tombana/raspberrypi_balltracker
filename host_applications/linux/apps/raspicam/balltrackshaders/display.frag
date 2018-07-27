@@ -16,12 +16,13 @@ void main(void) {
         r = fil.b;
         g = fil.a;
     }
-    if (r > 0.3) {
-        gl_FragColor = 0.7 * col + 0.3 * vec4(1.0, 0.0, 1.0, 1.0);
-    } else if (g > 0.75) {
-        gl_FragColor = 0.9 * col + 0.1 * vec4(0.0, 1.0, 0.0, 1.0);
-    } else {
-        gl_FragColor = col;
-    }
+    //if (r > 0.3) {
+    //    gl_FragColor = 0.7 * col + 0.3 * vec4(1.0, 0.0, 1.0, 1.0);
+    //} else if (g > 0.75) {
+    //    gl_FragColor = 0.9 * col + 0.1 * vec4(0.0, 1.0, 0.0, 1.0);
+    //} else {
+    //    gl_FragColor = col;
+    //}
     //gl_FragColor = 0.2 * col + 0.8 * vec4(r,r,r,1.0);
+    gl_FragColor = col;
 }

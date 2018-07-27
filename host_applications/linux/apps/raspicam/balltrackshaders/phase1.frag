@@ -62,7 +62,7 @@ vec2 getFilter(vec4 col) {
         }
     } else if (col.g == value) {
         float hue = (col.b - col.r) / chroma;
-        if (hue > 0.0 && hue < 0.9 && sat > 0.15 && value > 0.15 && value < 0.75 ) {
+        if (hue > 0.0 && hue < 0.9 && sat > 0.15 && value > 0.10 && value < 0.70 ) {
            greenfilter = 1.0;
         }
     }

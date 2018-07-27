@@ -424,8 +424,8 @@ static int balltrack_readout(int width, int height) {
                     }
                 }
             }
-            gxmin -= 3;
-            gxmax += 3;
+            gxmin -= 5;
+            gxmax += 5;
             gymin -= 3;
             gymax += 3;
             if (gxmin < 0) gxmin = 0;
@@ -472,11 +472,11 @@ static int balltrack_readout(int width, int height) {
             if (searchImax > height) searchImax = height;
             if (searchJmax > width ) searchJmax = width;
 
-            int threshold1 = 160;
-            int threshold2 = 200;
-            if (maxx < gxmin + 8 || maxx > gxmax - 8) {
-                threshold1 = 80;
-                threshold2 = 160;
+            int threshold1 = 120;
+            int threshold2 = 180;
+            if (maxx < gxmin + 10 || maxx > gxmax - 10) {
+                threshold1 = 50;
+                threshold2 = 100;
             }
 
 
@@ -537,16 +537,20 @@ static int balltrack_readout(int width, int height) {
                 return 1;
             } else {
                 if (ballGone++ == 60) {
-                    printf("Ball has gone for 60 frames!\n");
+                    printf("Ball gone for 60 frames.\n");
                     int i = ballCur - 1;
                     if (i < 0) i = historyCount - 1;
                     int goal = 0;
-                    if (ballXYs[i].x < greenxmin + (greenxmax - greenxmin) / 4.0f) {
-                        printf("Goal for red!\n");
+                    if (ballXYs[i].x < greenxmin + (greenxmax - greenxmin) / 5.0f) {
+                        printf("-------------------------------\n");
+                        printf("-------- Goal for red! --------\n");
+                        printf("-------------------------------\n");
                         goal = 1;
                     }
-                    if (ballXYs[i].y > greenxmin + 3.0f * (greenxmax - greenxmin) / 4.0f) {
-                        printf("Goal for blue!\n");
+                    if (ballXYs[i].x > greenxmin + 4.0f * (greenxmax - greenxmin) / 5.0f) {
+                        printf("--------------------------------\n");
+                        printf("-------- Goal for blue! --------\n");
+                        printf("--------------------------------\n");
                         goal = 2;
                     }
                     if (goal != 0) {
