@@ -433,13 +433,13 @@ static int balltrack_readout(int width, int height) {
                     // - y min/max check only once
                     // - if x1<gxmin then x2 does not need to be checked
                     // - ...
-                    if (G1 > 128) {
+                    if (G1 > 140) {
                         if (x1 < gxmin) gxmin = x1;
                         if (x1 > gxmax) gxmax = x1;
                         if (y < gymin) gymin = y;
                         if (y > gymax) gymax = y;
                     }
-                    if (G2 > 128) {
+                    if (G2 > 140) {
                         if (x2 < gxmin) gxmin = x2;
                         if (x2 > gxmax) gxmax = x2;
                         if (y < gymin) gymin = y;
@@ -447,8 +447,8 @@ static int balltrack_readout(int width, int height) {
                     }
                 }
             }
-            gxmin -= 8;
-            gxmax += 8;
+            gxmin -= 5;
+            gxmax += 5;
             gymin -= 3;
             gymax += 3;
             if (gxmin < 0) gxmin = 0;
@@ -498,8 +498,8 @@ static int balltrack_readout(int width, int height) {
             int threshold1 = 120;
             int threshold2 = 180;
             if (maxx < gxmin + 13 || maxx > gxmax - 13) {
-                threshold1 = 50;
-                threshold2 = 100;
+                threshold1 = 30;
+                threshold2 = 70;
             }
 
 
@@ -530,10 +530,16 @@ static int balltrack_readout(int width, int height) {
                 }
             }
             // Map to [-1,1]
-            greenxmin = gxmin / ((float)width) - 1.0f;
-            greenxmax = gxmax / ((float)width) - 1.0f;
-            greenymin = (2.0f * gymin) / ((float)height) - 1.0f;
-            greenymax = (2.0f * gymax) / ((float)height) - 1.0f;
+            float greenxmin_new = gxmin / ((float)width) - 1.0f;
+            float greenxmax_new = gxmax / ((float)width) - 1.0f;
+            float greenymin_new = (2.0f * gymin) / ((float)height) - 1.0f;
+            float greenymax_new = (2.0f * gymax) / ((float)height) - 1.0f;
+
+            greenxmin = 0.99f * greenxmin + 0.01f * greenxmin_new;
+            greenxmax = 0.99f * greenxmax + 0.01f * greenxmax_new;
+            greenymin = 0.99f * greenymin + 0.01f * greenymin_new;
+            greenymax = 0.99f * greenymax + 0.01f * greenymax_new;
+
             if (weight > threshold2) {
                 ballGone = 0;
                 // avgx, avgy are the bottom-left corner of the macropixels

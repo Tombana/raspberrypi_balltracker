@@ -51,7 +51,7 @@ vec2 getFilter(vec4 col) {
     float redfilter = 0.8;
     float greenfilter = 0.0;
     if (col.r == value) {
-        if (sat > 0.40 && value > 0.15 && value < 0.95 ) {
+        if (sat > 0.35 && value > 0.15 && value < 0.95 ) {
             float hue = (col.g - col.b) / chroma;
             // Hue upper bound of 1.0 is automatic.
             if (hue > 0.70) {
