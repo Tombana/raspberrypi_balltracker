@@ -209,7 +209,7 @@ static void init_ogl(STATE_T *state)
 static void redraw_scene(STATE_T *state)
 {
    // Start with a clear screen
-   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+   //glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
 #if 0
    // Need to rotate textures - do this by rotating each cube face

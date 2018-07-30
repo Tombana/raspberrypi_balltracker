@@ -23,8 +23,8 @@ void main(void) {
     //float G = clamp(1.164 * (Y - 0.0625) - 0.813 * (V - 0.5) - 0.391 * (U - 0.5) , 0.0,1.0);
     //float R = clamp(1.164 * (Y - 0.0625) + 1.596 * (V - 0.5)  , 0.0,1.0);
     //gl_FragColor = vec4(abs(R - col.r), abs(G - col.g), abs(B - col.b), 1.0);
-    gl_FragColor = rgb;
-    //gl_FragColor = col;
+    //gl_FragColor = rgb;
+    gl_FragColor = col;
 }
 
 

@@ -23,6 +23,6 @@ void main(void) {
     //} else {
     //    gl_FragColor = col;
     //}
-    //gl_FragColor = 0.2 * col + 0.8 * vec4(r,r,r,1.0);
+    //gl_FragColor = 0.3 * col + 0.7 * vec4(r,r,r,1.0);
     gl_FragColor = col;
 }
