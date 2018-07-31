@@ -586,11 +586,11 @@ static int balltrack_readout(int width, int height) {
                         }
                     }
                     if (goal != 0) {
-                        //int fd = open("/tmp/foos-debug.in", O_WRONLY);
-                        //if (fd > 0) {
-                        //    write(fd, (goal == 1 ? "BG\n" : "YG\n"), 4);
-                        //    close(fd);
-                        //}
+                        int fd = open("/tmp/foos-debug.in", O_WRONLY | O_NONBLOCK);
+                        if (fd > 0) {
+                            write(fd, (goal == 1 ? "RG\n" : "BG\n"), 3);
+                            close(fd);
+                        }
                     }
                 }	
             }
@@ -611,6 +611,14 @@ int balltrack_core_redraw(int width, int height, GLuint srctex, GLuint srctype)
         render_pass(&balltrack_shader_plain, srctype, srctex, 0, width, height);
         dump_frame(width, height, "framedump.tga");
         printf("Frame dumped to framedump.tga\n");
+    }
+
+    if ((frameNumber % 600) == 0) {
+        int fd = open("/tmp/foos-debug.in", O_WRONLY | O_NONBLOCK);
+        if (fd > 0) {
+            write(fd, "heartbeat\n", 10);
+            close(fd);
+        }
     }
 
 #if DO_DIFF
