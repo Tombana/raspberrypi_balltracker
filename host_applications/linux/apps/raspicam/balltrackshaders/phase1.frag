@@ -48,17 +48,18 @@ vec2 getFilter(vec4 col) {
     float value = max(col.r, max(col.g, col.b));
     float chroma= value - min(col.r, min(col.g, col.b));
     float sat = (value > 0.0 ? (chroma / value) : 0.0); 
-    float redfilter = 0.8;
+    float ballfilter = 0.0; // 0.8;
     float greenfilter = 0.0;
     if (col.r == value) {
         if (sat > 0.35 && value > 0.15 && value < 0.95 ) {
             float hue = (col.g - col.b) / chroma;
             // Hue upper bound of 1.0 is automatic.
             if (hue > 0.70) {
-                redfilter = 1.0;
-            } else if (hue < 0.30) {
-                redfilter = 0.0;
+                ballfilter = 1.0;
             }
+            //else if (hue < 0.30) {
+            //    ballfilter = 0.0;
+            //}
         }
     } else if (col.g == value) {
         float hue = (col.b - col.r) / chroma;
@@ -66,7 +67,7 @@ vec2 getFilter(vec4 col) {
            greenfilter = 1.0;
         }
     }
-    return vec2(redfilter, greenfilter);
+    return vec2(ballfilter, greenfilter);
 }
 
 uniform samplerExternalOES tex;

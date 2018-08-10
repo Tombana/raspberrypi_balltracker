@@ -68,12 +68,14 @@ static int balltrack_init(RASPITEX_STATE *raspitex_state)
  */
 static int balltrack_redraw(RASPITEX_STATE* state)
 {
+#ifdef DO_YUV
     GLCHK(glActiveTexture(GL_TEXTURE2));
     GLCHK(glBindTexture(GL_TEXTURE_EXTERNAL_OES, state->y_texture));
     GLCHK(glActiveTexture(GL_TEXTURE3));
     GLCHK(glBindTexture(GL_TEXTURE_EXTERNAL_OES, state->u_texture));
     GLCHK(glActiveTexture(GL_TEXTURE4));
     GLCHK(glBindTexture(GL_TEXTURE_EXTERNAL_OES, state->v_texture));
+#endif
     return balltrack_core_redraw(state->width, state->height, state->texture, GL_TEXTURE_EXTERNAL_OES);
 }
 
@@ -81,9 +83,11 @@ int balltrack_open(RASPITEX_STATE *state)
 {
    state->ops.gl_init = balltrack_init;
    state->ops.redraw = balltrack_redraw;
+#ifdef DO_YUV
    state->ops.update_y_texture = raspitexutil_update_y_texture;
    state->ops.update_u_texture = raspitexutil_update_u_texture;
    state->ops.update_v_texture = raspitexutil_update_v_texture;
+#endif
    state->ops.update_texture = raspitexutil_update_texture;
    return 0;
 }

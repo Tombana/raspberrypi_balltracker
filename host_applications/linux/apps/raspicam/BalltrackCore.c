@@ -48,16 +48,24 @@ static int height0 = 720;
 // -- 2x2 pixels to 1 pixel
 static int width1  = 640 / 2; // RGBA packs two pairs
 static int height1 = 360;
+
+#ifdef THREE_PHASES
 // -- From phase 1 to phase 2: dilate 'red' filter, do not erode 'orange filter' but rescale?
 // -- 4x4 pixels to 1 pixel (but sample 12x12 pixels to 1 pixel)
-static int width2  = 160 / 2; // RGBA packs to pairs
+static int width2  = 160 / 2; // RGBA packs two pairs
 static int height2 = 90;
 // -- From phase 2 to phase 3: average for easier cpu handling ???
 // -- 2x2 pixels to 1 pixel
-static int width3  = 80 / 2; // RGBA packs to pairs
+static int width3  = 80 / 2; // RGBA packs two pairs
 static int height3 = 45;
-// -- From phase 3 to screen
-// screenwidth,screenheight
+#else
+// -- From phase 1 to phase 2: average
+// -- 8x8 pixels to 1 pixel (but sample 12x12 pixels to 1 pixel)
+static int width2  = 80 / 2; // RGBA packs two pairs
+static int height2 = 45;
+static int width3  = 80 / 2;
+static int height3 = 45;
+#endif
 
 
 static GLfloat quad_varray[] = {
@@ -258,9 +266,11 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
     rc = shader_set_uniforms(&balltrack_shader_plain, width0, height0, 0, 0);
     if (rc != 0)
         goto end;
+#ifdef DO_YUV
     GLCHK(glUniform1i(balltrack_shader_plain.uniform_locations[1], 2)); // Texture unit
     GLCHK(glUniform1i(balltrack_shader_plain.uniform_locations[2], 3)); // Texture unit
     GLCHK(glUniform1i(balltrack_shader_plain.uniform_locations[3], 4)); // Texture unit
+#endif
 
     printf("Building shader `diff`\n");
     rc = balltrack_build_shader_program(&balltrack_shader_diff);
@@ -296,7 +306,12 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
 #endif
     rtt_tex1 = createFilterTexture(width1, height1, tex1scaling);
     rtt_tex2 = createFilterTexture(width2, height2, tex2scaling);
+#ifdef THREE_PHASES
     rtt_tex3 = createFilterTexture(width3, height3, tex3scaling);
+#else
+    (void)tex3scaling;
+    rtt_tex3 = rtt_tex2; // hmmmm....
+#endif
     rtt_copytex = createFilterTexture(width0, height0, GL_NEAREST);
 
     printf("Creating vertex-buffer object\n");
@@ -308,10 +323,12 @@ int balltrack_core_init(int externalSamplerExtension, int flipY)
     GLCHK(glDisable(GL_BLEND));
     GLCHK(glDisable(GL_DEPTH_TEST));
 
+#ifdef GENERATE_TIMESERIES
     timeseriesfile = open("/tmp/timeseries.txt", O_WRONLY);
     if (!timeseriesfile) {
         printf("Unable to open /tmp/timeseries.txt\n");
     }
+#endif
 end:
     return rc;
 }
@@ -397,8 +414,11 @@ GLPOINT ballXYs[120];
 int ballTimes[120];
 static int frameNumber = 0;
 static int ballCur = 0;
-float greenxmin, greenxmax, greenymin, greenymax;
-static int ballGone = 0;
+float greenxmin = -0.8f;
+float greenxmax =  0.8f;
+float greenymin = -0.8f;
+float greenymax =  0.8f;
+static int ballGone = 1000;
 
 static float goalWidth = 0.2f;
 static float goalHeight = 0.5f;
@@ -447,14 +467,27 @@ static int balltrack_readout(int width, int height) {
                     }
                 }
             }
-            gxmin -= 5;
-            gxmax += 5;
+            gxmin -= 4;
+            gxmax += 4;
             gymin -= 3;
             gymax += 3;
             if (gxmin < 0) gxmin = 0;
             if (gymin < 0) gymin = 0;
             if (gxmax > 2*width-1) gxmax = 2*width - 1;
             if (gymax > height) gymax = height;
+
+            // Map to [-1,1]
+            float greenxmin_new = gxmin / ((float)width) - 1.0f;
+            float greenxmax_new = gxmax / ((float)width) - 1.0f;
+            float greenymin_new = (2.0f * gymin) / ((float)height) - 1.0f;
+            float greenymax_new = (2.0f * gymax) / ((float)height) - 1.0f;
+
+            // Take time average
+            greenxmin = 0.95f * greenxmin + 0.05f * greenxmin_new;
+            greenxmax = 0.95f * greenxmax + 0.05f * greenxmax_new;
+            greenymin = 0.95f * greenymin + 0.05f * greenymin_new;
+            greenymax = 0.95f * greenymax + 0.05f * greenymax_new;
+
 
             // Find the max orange intensity
             uint32_t maxx = 0, maxy = 0;
@@ -502,7 +535,6 @@ static int balltrack_readout(int width, int height) {
                 threshold2 = 70;
             }
 
-
             uint32_t avgx = 0, avgy = 0;
             uint32_t weight = 0;
             uint32_t count = 0;
@@ -529,17 +561,6 @@ static int balltrack_readout(int width, int height) {
                     }
                 }
             }
-            // Map to [-1,1]
-            float greenxmin_new = gxmin / ((float)width) - 1.0f;
-            float greenxmax_new = gxmax / ((float)width) - 1.0f;
-            float greenymin_new = (2.0f * gymin) / ((float)height) - 1.0f;
-            float greenymax_new = (2.0f * gymax) / ((float)height) - 1.0f;
-
-            greenxmin = 0.99f * greenxmin + 0.01f * greenxmin_new;
-            greenxmax = 0.99f * greenxmax + 0.01f * greenxmax_new;
-            greenymin = 0.99f * greenymin + 0.01f * greenymin_new;
-            greenymax = 0.99f * greenymax + 0.01f * greenymax_new;
-
             if (weight > threshold2) {
                 ballGone = 0;
                 // avgx, avgy are the bottom-left corner of the macropixels
@@ -565,8 +586,8 @@ static int balltrack_readout(int width, int height) {
                 //printf("Average x,y is (%u, %u)!", avgx, avgy);
                 return 1;
             } else {
-                if (ballGone++ == 60) {
-                    printf("Ball gone for 60 frames.\n");
+                if (ballGone++ == 30) {
+                    printf("Ball gone for 30 frames.\n");
                     int i = ballCur - 1;
                     if (i < 0) i = historyCount - 1;
                     int goal = 0;
@@ -607,19 +628,13 @@ int balltrack_core_redraw(int width, int height, GLuint srctex, GLuint srctype)
     ++frameNumber;
     // Width,height is the size of the preview window
 
+#ifdef DO_FRAMEDUMP
     if (frameNumber == 60) {
         render_pass(&balltrack_shader_plain, srctype, srctex, 0, width, height);
         dump_frame(width, height, "framedump.tga");
         printf("Frame dumped to framedump.tga\n");
     }
-
-    if ((frameNumber % 600) == 0) {
-        int fd = open("/tmp/foos-debug.in", O_WRONLY | O_NONBLOCK);
-        if (fd > 0) {
-            write(fd, "heartbeat\n", 10);
-            close(fd);
-        }
-    }
+#endif
 
 #if DO_DIFF
     // Diff with previous
@@ -635,8 +650,10 @@ int balltrack_core_redraw(int width, int height, GLuint srctex, GLuint srctype)
     render_pass(&balltrack_shader_1, srctype,       srctex,   rtt_tex1, width1, height1);
     // Second pass: dilate red players
     render_pass(&balltrack_shader_2, GL_TEXTURE_2D, rtt_tex1, rtt_tex2, width2, height2);
+#ifdef THREE_PHASES
     // Third pass: downsample
     render_pass(&balltrack_shader_3, GL_TEXTURE_2D, rtt_tex2, rtt_tex3, width3, height3);
+#endif
     // Readout result
     balltrack_readout(width3, height3);
     // Third pass: render to screen
