@@ -86,8 +86,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "RaspiCLI.h"
 #include "RaspiTex.h"
 
-#include "gl_scenes/balltrack.h"
-
 #include <semaphore.h>
 
 #include <stdbool.h>
@@ -2561,11 +2559,7 @@ int main(int argc, const char **argv)
    }
 
 
-   state.raspitex_state.scene_id = 12345; // Non-existing id so that it does not open a scene
    raspitex_init(&state.raspitex_state);
-   // Override scene
-   balltrack_open(&state.raspitex_state);
-
 
    // OK, we have a nice set of parameters. Now set up our components
    // We have three components. Camera, Preview and encoder.
