@@ -37,13 +37,14 @@ heartbeatLock = threading.Lock()
 
 def startTracking():
     global camprocess
-    if not camprocess:
+    if camprocess is None:
         camprocess = subprocess.Popen(["./run-camera.sh"])
 
 def stopTracking():
     global camprocess
     print("Stop tracking request!")
-    camprocess.terminate()
+    if camprocess is not None:
+        camprocess.terminate()
     camprocess = None
 
 def doReplay():
@@ -63,6 +64,7 @@ def new_client(client, server):
 # Called for every client disconnecting
 def client_left(client, server):
 	print("Client(%d) disconnected" % client['id'])
+        stopTracking()
 
 
 # Called when a client sends a message
@@ -78,7 +80,7 @@ def message_received(client, server, message):
     elif (message == "heartbeat"):
         heartbeatLock.acquire()
         heartbeatTimer = 0
-        startTracking()
+        #startTracking()
         heartbeatLock.release()
     else:
         if len(message) > 200:

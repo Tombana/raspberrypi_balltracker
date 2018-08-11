@@ -58,6 +58,27 @@ int analysis_init() {
     return 1;
 }
 
+// Returns 0 when not in goal
+// Returns 1 when in left goal
+// Returns 2 when in right goal
+static int isInGoal(POINT ball) {
+    float yAvg = 0.5f * (field.ymin + field.ymax);
+    if (ball.y > yAvg - goalHeight && ball.y < yAvg + goalHeight) {
+        if (ball.x < field.xmin + goalWidth) {
+            return 1;
+        } else if (ball.x > field.xmax - goalWidth) {
+            return 2;
+        }
+    }
+    return 0;
+}
+
+static float distSq(POINT a, POINT b) {
+    float dx = a.x - b.x;
+    float dy = a.y - b.y;
+    return dx * dx + dy * dy;
+}
+
 int analysis_update(FIELD newField, POINT ball, int ballFound) {
     ++frameNumber;
 
@@ -67,12 +88,25 @@ int analysis_update(FIELD newField, POINT ball, int ballFound) {
     field.ymin = 0.98f * field.ymin + 0.02 * newField.ymin;
     field.ymax = 0.98f * field.ymax + 0.02 * newField.ymax;
 
+    int prevIdx = (ballCur == 0 ? historyCount - 1 : ballCur - 1);
     if (ballFound) {
         ballMissing = 0;
 
         balls[ballCur] = ball;
         ballFrames[ballCur] = frameNumber;
         ++ballCur;
+
+        // Check for fast shot to goal
+        // This point and previous points should be at most 2 frames apart
+        POINT prevBall = balls[prevIdx];
+        int prevFrame = ballFrames[prevIdx];
+        if (frameNumber - prevFrame <= 2) {
+            // Distance should be large ??
+            float distThreshold = 0.4f * (field.xmax - field.xmin);
+            if (distSq(prevBall, ball) > distThreshold * distThreshold ) {
+                analysis_send_to_server("FAST\n");
+            }
+        }
 
         if(ballCur >= historyCount) {
             ballCur = 0;
@@ -88,26 +122,15 @@ int analysis_update(FIELD newField, POINT ball, int ballFound) {
     } else {
         if (ballMissing++ == 30) {
             printf("Ball gone for 30 frames.\n");
-            int i = ballCur - 1;
-            if (i < 0) i = historyCount - 1;
-            POINT lastBall = balls[i];
-            float yAvg = 0.5f * (field.ymin + field.ymax);
-            if (lastBall.y > yAvg - goalHeight && lastBall.y < yAvg + goalHeight) {
-                if (lastBall.x < field.xmin + goalWidth) {
-                    printf("-------------------------------\n");
-                    printf("-------- Goal for red! --------\n");
-                    printf("-------------------------------\n");
-                    analysis_send_to_server("RG\n");
-                }
-                if (lastBall.x > field.xmax - goalWidth) {
-                    printf("--------------------------------\n");
-                    printf("-------- Goal for blue! --------\n");
-                    printf("--------------------------------\n");
-                    analysis_send_to_server("BG\n");
-                }
+            int goal = isInGoal(balls[prevIdx]);
+            if (goal == 1) {
+                printf("Goal for red!\n");
+                analysis_send_to_server("RG\n");
+            } else if (goal == 2) {
+                printf("Goal for blue!\n");
+                analysis_send_to_server("BG\n");
             }
         }	
-
     }
     return 1;
 }
