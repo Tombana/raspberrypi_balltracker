@@ -99,12 +99,19 @@ int analysis_update(FIELD newField, POINT ball, int ballFound) {
         // Check for fast shot to goal
         // This point and previous points should be at most 2 frames apart
         POINT prevBall = balls[prevIdx];
-        int prevFrame = ballFrames[prevIdx];
-        if (frameNumber - prevFrame <= 2) {
+        int frameDiffs = frameNumber - ballFrames[prevIdx];
+        if (frameDiffs <= 2) {
             // Distance should be large ??
-            float distThreshold = 0.4f * (field.xmax - field.xmin);
+            // At least 30% of field width per frame
+            float distThreshold = ((float)frameDiffs) * 0.30f * (field.xmax - field.xmin);
             if (distSq(prevBall, ball) > distThreshold * distThreshold ) {
-                analysis_send_to_server("FAST\n");
+                float yAvg = 0.5f * (field.ymin + field.ymax);
+                if (ball.y > yAvg - goalHeight && ball.y < yAvg + goalHeight && 
+                        (ball.x < field.xmin + 2.0f * goalWidth || ball.x > field.xmax - 2.0f * goalWidth) ) {
+                    analysis_send_to_server("SAVE\n");
+                } else {
+                    analysis_send_to_server("FAST\n");
+                }
             }
         }
 
