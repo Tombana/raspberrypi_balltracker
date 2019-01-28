@@ -2,8 +2,8 @@
 
 fragments_path="/dev/shm/replay/fragments"
 replay_file="/dev/shm/replay/replay.h264"
-ignore_recent_chunks=2
-replay_chunks=20
+ignore_recent_chunks=1
+replay_chunks=14
 
 fragments=`ls -tr $fragments_path/out*.h264 | head -n-$ignore_recent_chunks | tail -n$replay_chunks`
 

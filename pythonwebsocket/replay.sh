@@ -2,4 +2,4 @@
 
 pkill player 2> /dev/null
 
-./player "/dev/shm/replay/replay_short.h264" 20
+./player "/dev/shm/replay/replay.h264" 20

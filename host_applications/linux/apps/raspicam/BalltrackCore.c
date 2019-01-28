@@ -522,12 +522,8 @@ static int balltrack_readout(int width, int height) {
                 }
             }
 
-            int threshold1 = 50;
-            int threshold2 = 100;
-            if (maxx < gxmin + 13 || maxx > gxmax - 13) {
-                threshold1 = 30;
-                threshold2 = 70;
-            }
+            int threshold1 = 30;
+            int threshold2 = 60;
 
             // avgx, avgy are the bottom-left corner of the macropixels
             // Shift them by half a pixel to fix

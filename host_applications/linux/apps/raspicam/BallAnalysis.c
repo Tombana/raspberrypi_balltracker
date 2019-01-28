@@ -14,7 +14,7 @@
 
 // Constants
 static float goalWidth = 0.15f;
-static float goalHeight = 0.4f;
+static float goalHeight = 0.35f;
 
 
 // Ball history
@@ -82,6 +82,18 @@ static float distSq(POINT a, POINT b) {
 int analysis_update(FIELD newField, POINT ball, int ballFound) {
     ++frameNumber;
 
+    static int sendSAVE = 0;
+    static int lastGOAL = 0;
+
+    if (sendSAVE) {
+        // Only send the SAVE if it does not get interrupted by a goal
+        // within 20 frames
+        if (sendSAVE++ == 20) {
+            analysis_send_to_server("SAVE\n");
+            sendSAVE = 0;
+        }
+    }
+
     // Time average for field, because it fluctuates too much
     field.xmin = 0.98f * field.xmin + 0.02 * newField.xmin;
     field.xmax = 0.98f * field.xmax + 0.02 * newField.xmax;
@@ -90,6 +102,9 @@ int analysis_update(FIELD newField, POINT ball, int ballFound) {
 
     int prevIdx = (ballCur == 0 ? historyCount - 1 : ballCur - 1);
     if (ballFound) {
+        if (ballMissing >= 30) {
+            printf("Ball was gone for %d frames.\n", ballMissing);
+        }
         ballMissing = 0;
 
         balls[ballCur] = ball;
@@ -100,17 +115,17 @@ int analysis_update(FIELD newField, POINT ball, int ballFound) {
         // This point and previous points should be at most 2 frames apart
         POINT prevBall = balls[prevIdx];
         int frameDiffs = frameNumber - ballFrames[prevIdx];
-        if (frameDiffs <= 2) {
+        if (frameDiffs <= 20) {
             // Distance should be large ??
-            // At least 30% of field width per frame
-            float distThreshold = ((float)frameDiffs) * 0.30f * (field.xmax - field.xmin);
+            // At least x % of field width per frame
+            float distThreshold = ((float)frameDiffs) * 0.10f * (field.xmax - field.xmin);
             if (distSq(prevBall, ball) > distThreshold * distThreshold ) {
                 float yAvg = 0.5f * (field.ymin + field.ymax);
                 if (ball.y > yAvg - goalHeight && ball.y < yAvg + goalHeight && 
-                        (ball.x < field.xmin + 2.0f * goalWidth || ball.x > field.xmax - 2.0f * goalWidth) ) {
-                    analysis_send_to_server("SAVE\n");
+                        (ball.x < field.xmin + 3.0f * goalWidth || ball.x > field.xmax - 3.0f * goalWidth) ) {
+                    sendSAVE = 1;
                 } else {
-                    analysis_send_to_server("FAST\n");
+                    //analysis_send_to_server("FAST\n");
                 }
             }
         }
@@ -127,15 +142,20 @@ int analysis_update(FIELD newField, POINT ball, int ballFound) {
             }
         }
     } else {
-        if (ballMissing++ == 30) {
-            printf("Ball gone for 30 frames.\n");
+        if (ballMissing++ == 15) {
             int goal = isInGoal(balls[prevIdx]);
-            if (goal == 1) {
-                printf("Goal for red!\n");
-                analysis_send_to_server("RG\n");
-            } else if (goal == 2) {
-                printf("Goal for blue!\n");
-                analysis_send_to_server("BG\n");
+            if (goal) {
+                sendSAVE = 0; // Dont send a potential SAVE
+                if (frameNumber - lastGOAL >= 50) { // Check if the last goal was at least 50 frames ago
+                    lastGOAL = frameNumber;
+                    if (goal == 1) {
+                        printf("Goal for red!\n");
+                        analysis_send_to_server("RG\n");
+                    } else if (goal == 2) {
+                        printf("Goal for blue!\n");
+                        analysis_send_to_server("BG\n");
+                    }
+                }
             }
         }	
     }
