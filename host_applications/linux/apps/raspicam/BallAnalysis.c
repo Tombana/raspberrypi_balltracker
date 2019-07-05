@@ -79,6 +79,60 @@ static float distSq(POINT a, POINT b) {
     return dx * dx + dy * dy;
 }
 
+// 
+// 0 -- unknown
+// 1 -- blue keeper
+// 2 -- blue defender
+// 3 -- red attacker
+// 4 -- blue middle
+// 5 -- red middle
+// 6 -- blue attacker
+// 7 -- red defender
+// 8 -- red keeper
+//
+static int getPlayerBar(POINT ball) {
+    float x = (ball.x - field.xmin) / (field.xmax - field.xmin);
+
+    if (x < 0.0f || x >= 1.0f)
+        return 0;
+
+    return (int)(1.0f + 8.0f * x);
+}
+
+static int playerBarFrameThreshold = 4;
+
+static int barTeams[9] = {0, 1, 1, 2, 1, 2, 1, 2, 2};
+
+// team == 1 -> goal for red, scored by blue
+// team == 2 -> goal for blue, scored by red
+static int getPlayerWhoScored(int team) {
+    int curIdx = ballCur;
+    int player = 0;
+    int hits = 0;
+    for(int i = 0; i < 20; ++i) {
+        // Go to previous index
+        if (curIdx == 0)
+            curIdx = historyCount - 1;
+        else
+            curIdx--;
+        int p = getPlayerBar(balls[curIdx]);
+        if (barTeams[p] == team)
+            continue;
+        if (p == player) {
+            hits++;
+            if (hits == playerBarFrameThreshold)
+                break;
+        } else {
+            player = p;
+            hits = 1;
+        }
+    }
+    if (hits == playerBarFrameThreshold && player > 0 && player <= 8) {
+        return player;
+    }
+    return 0;
+}
+
 int analysis_update(FIELD newField, POINT ball, int ballFound) {
     ++frameNumber;
 
@@ -154,6 +208,13 @@ int analysis_update(FIELD newField, POINT ball, int ballFound) {
                     } else if (goal == 2) {
                         printf("Goal for blue!\n");
                         analysis_send_to_server("BG\n");
+                    }
+                    int player = getPlayerWhoScored(goal);
+                    if (player) {
+                        printf("TEST: Scored by \"bar\" %d\n", player);
+                        char buffer[128];
+                        sprintf(buffer, "SCOREDBY %d\n", player);
+                        analysis_send_to_server(buffer);
                     }
                 }
             }
